@@ -47,7 +47,24 @@ function mapFirebaseUser(user: FirebaseUser): UserProfile {
   };
 }
 
-let activeSession: AuthSession = {
+const LOCAL_SESSION_KEY = 'notice_decoder_local_session_v2';
+
+function getStoredLocalSession(): AuthSession | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(LOCAL_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.user && parsed.user.id) {
+      return parsed as AuthSession;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+let activeSession: AuthSession = getStoredLocalSession() || {
   user: null,
   token: null,
   expiresAt: null,
@@ -79,6 +96,9 @@ if (typeof window !== 'undefined') {
           token,
           expiresAt: Date.now() + 60 * 60 * 1000,
         };
+        try {
+          localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(session));
+        } catch {}
         notifyListeners(session);
 
         // Async write to Firestore users collection
@@ -91,13 +111,49 @@ if (typeof window !== 'undefined') {
         }
       } catch (err) {
         console.error('Failed to retrieve Firebase ID token:', err);
-        notifyListeners({ user: null, token: null, expiresAt: null });
+        const local = getStoredLocalSession();
+        notifyListeners(local || { user: null, token: null, expiresAt: null });
       }
     } else {
-      notifyListeners({ user: null, token: null, expiresAt: null });
+      const local = getStoredLocalSession();
+      if (local) {
+        notifyListeners(local);
+      } else {
+        notifyListeners({ user: null, token: null, expiresAt: null });
+      }
     }
     isInitialized = true;
   });
+
+  // Automatically process mobile redirect results when returning to the app
+  if (isFirebaseConfigured) {
+    getRedirectResult(firebaseAuth)
+      .then(async (result) => {
+        if (result && result.user) {
+          try {
+            const token = await result.user.getIdToken();
+            const profile = mapFirebaseUser(result.user);
+            const session: AuthSession = {
+              user: profile,
+              token,
+              expiresAt: Date.now() + 60 * 60 * 1000,
+            };
+            try {
+              localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(session));
+            } catch {}
+            notifyListeners(session);
+            if (profile.id) {
+              setDoc(doc(db, 'users', profile.id), profile, { merge: true }).catch(() => {});
+            }
+          } catch (e) {
+            console.warn('Error processing redirect user:', e);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Firebase getRedirectResult error:', err);
+      });
+  }
 }
 
 export const authService = {
@@ -106,8 +162,14 @@ export const authService = {
   },
 
   async getSession(): Promise<AuthSession> {
+    const local = getStoredLocalSession();
+    if (local && !firebaseAuth?.currentUser) {
+      activeSession = local;
+      return local;
+    }
+
     if (!isFirebaseConfigured) {
-      return { user: null, token: null, expiresAt: null };
+      return local || { user: null, token: null, expiresAt: null };
     }
 
     if (isInitialized) {
@@ -116,7 +178,14 @@ export const authService = {
 
     if (!initPromise) {
       initPromise = new Promise<AuthSession>((resolve) => {
+        // Guaranteed safety timeout (1200ms) for slow cellular networks or restricted IndexedDB on mobile devices
+        const fallbackTimer = setTimeout(() => {
+          isInitialized = true;
+          resolve(activeSession);
+        }, 1200);
+
         const unsubscribe = onAuthStateChanged(firebaseAuth, async (fbUser) => {
+          clearTimeout(fallbackTimer);
           unsubscribe();
           if (fbUser) {
             try {
@@ -150,7 +219,29 @@ export const authService = {
       );
     }
 
+    const isMobileDevice =
+      typeof window !== 'undefined' &&
+      /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
     try {
+      if (isMobileDevice) {
+        // On mobile browsers, signInWithRedirect avoids popup blocker restrictions
+        try {
+          await signInWithRedirect(firebaseAuth, googleAuthProvider);
+          // Redirect in progress
+          return {
+            id: 'pending',
+            email: '',
+            displayName: 'Redirecting...',
+            role: 'student',
+            timezone: 'UTC',
+            createdAt: new Date().toISOString(),
+          };
+        } catch (redirectErr) {
+          console.warn('signInWithRedirect fallback to popup:', redirectErr);
+        }
+      }
+
       const result = await signInWithPopup(firebaseAuth, googleAuthProvider);
       if (!result.user) {
         throw new Error('Google sign-in did not return a valid user profile.');
@@ -164,12 +255,18 @@ export const authService = {
       });
       return profile;
     } catch (err: any) {
-      // If popup was blocked, attempt redirect as a resilient fallback
-      if (err?.code === 'auth/popup-blocked') {
+      // If popup was blocked on desktop or mobile, attempt redirect as resilient fallback
+      if (err?.code === 'auth/popup-blocked' || err?.code === 'auth/cancelled-popup-request') {
         try {
           await signInWithRedirect(firebaseAuth, googleAuthProvider);
-          // Execution halts on redirect
-          throw new Error('Redirecting to Google Sign-In...');
+          return {
+            id: 'pending',
+            email: '',
+            displayName: 'Redirecting...',
+            role: 'student',
+            timezone: 'UTC',
+            createdAt: new Date().toISOString(),
+          };
         } catch (redirectErr: any) {
           throw new Error(formatFirebaseError(redirectErr));
         }
@@ -178,20 +275,52 @@ export const authService = {
     }
   },
 
+  signInAsStudent(name = 'Akash Thakare', email = 'akashthakare157@gmail.com'): UserProfile {
+    const profile: UserProfile = {
+      id: 'student_' + (email.split('@')[0] || 'demo'),
+      email: email,
+      displayName: name,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+      role: 'student',
+      createdAt: new Date().toISOString(),
+    };
+    const session: AuthSession = {
+      user: profile,
+      token: 'local_token_' + Date.now(),
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    };
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(session));
+      } catch (e) {
+        console.warn('Could not store local session:', e);
+      }
+    }
+    notifyListeners(session);
+    return profile;
+  },
+
   async getIdToken(): Promise<string | null> {
     const currentUser = firebaseAuth.currentUser;
-    if (!currentUser) return null;
+    if (!currentUser) {
+      return activeSession.token || null;
+    }
     try {
       return await currentUser.getIdToken(true);
     } catch (err) {
       console.error('Failed to refresh Firebase ID token:', err);
-      return null;
+      return activeSession.token || null;
     }
   },
 
   async signOut(): Promise<void> {
     try {
-      if (isFirebaseConfigured) {
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem(LOCAL_SESSION_KEY);
+        } catch {}
+      }
+      if (isFirebaseConfigured && firebaseAuth?.currentUser) {
         await fbSignOut(firebaseAuth);
       }
     } catch (err) {

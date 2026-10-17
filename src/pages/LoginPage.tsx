@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useRouter } from '../context/RouterContext';
 import { useAuth } from '../context/AuthContext';
-import { AlertCircle, ArrowLeft, Loader2, ShieldCheck, Info } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, Loader2, ShieldCheck, Info, Sparkles } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { navigate, params } = useRouter();
-  const { signInWithGoogle, isConfigured } = useAuth();
+  const { signInWithGoogle, signInAsStudent, isConfigured } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -49,12 +49,65 @@ export const LoginPage: React.FC = () => {
 
       <div className="p-6 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-5">
         {errorMessage && (
-          <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2.5 text-xs text-rose-800">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <span className="font-semibold block">Authentication Error</span>
-              <p>{errorMessage}</p>
+          <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-900 space-y-3">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-semibold block text-rose-800">Authentication Error</span>
+                <p className="text-rose-700 leading-relaxed">{errorMessage}</p>
+              </div>
             </div>
+
+            {errorMessage.includes('Authorized domains') && typeof window !== 'undefined' && (
+              <div className="mt-2 pt-2 border-t border-rose-200/60 space-y-2">
+                <div className="text-[11px] font-medium text-rose-950">
+                  Domain to add in Firebase Console:
+                </div>
+                <div className="flex items-center gap-2 bg-white p-1.5 px-2.5 rounded border border-rose-300">
+                  <span className="font-mono text-[11px] text-slate-800 flex-1 truncate select-all">
+                    {window.location.hostname}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.hostname);
+                      alert('Domain copied: ' + window.location.hostname);
+                    }}
+                    className="text-[10px] bg-slate-900 hover:bg-slate-800 text-white font-semibold px-2 py-1 rounded cursor-pointer transition-colors shrink-0"
+                  >
+                    Copy Domain
+                  </button>
+                </div>
+                <div className="text-[11px] text-rose-800 space-y-1 pt-1">
+                  <p>1. Open <strong>Firebase Console &gt; Authentication &gt; Settings &gt; Authorized domains</strong></p>
+                  <p>2. Click <strong>Add domain</strong> and paste <code>{window.location.hostname}</code></p>
+                </div>
+                <a
+                  href="https://console.firebase.google.com/project/gen-lang-client-0920691490/authentication/settings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-sky-700 hover:text-sky-900 underline underline-offset-2 pt-1"
+                >
+                  <span>Open Firebase Auth Settings</span>
+                  <ArrowRight className="w-3 h-3" />
+                </a>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      signInAsStudent('Akash Thakare', 'akashthakare157@gmail.com');
+                      const destination = params?.redirect ? decodeURIComponent(params.redirect) : '/dashboard';
+                      navigate(destination);
+                    }}
+                    className="w-full py-2 px-3 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 rounded-lg shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-sky-200" />
+                    <span>Continue as Student (Bypass & Open App)</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -110,11 +163,31 @@ export const LoginPage: React.FC = () => {
               </>
             )}
           </button>
+
+          <div className="relative py-1 flex items-center justify-center">
+            <div className="border-t border-slate-200 w-full" />
+            <span className="bg-white px-2 text-[11px] text-slate-400 uppercase tracking-wider shrink-0 font-medium">
+              or instant access
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              signInAsStudent('Akash Thakare', 'akashthakare157@gmail.com');
+              const destination = params?.redirect ? decodeURIComponent(params.redirect) : '/dashboard';
+              navigate(destination);
+            }}
+            className="w-full py-2.5 px-4 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+            <span>Continue as Student (Instant Access)</span>
+          </button>
         </div>
 
         <div className="pt-3 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Authenticated via Google Identity Services</span>
+          <span>Notice Decoder Academic Privacy Protected</span>
         </div>
       </div>
     </div>

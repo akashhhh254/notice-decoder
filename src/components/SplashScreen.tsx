@@ -12,17 +12,14 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
   const [fadingOut, setFadingOut] = useState(false);
 
   useEffect(() => {
-    // If auth is still initializing, wait briefly
-    if (loading) return;
-
     // Check if user prefers reduced motion
     const prefersReducedMotion =
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // Fast transition for returning authenticated users
+    // Guaranteed splash timeout: never block mobile users waiting on network
     const isReturningAuth = Boolean(user);
-    const delay = prefersReducedMotion ? 250 : isReturningAuth ? 500 : 2000;
+    const delay = prefersReducedMotion ? 200 : isReturningAuth ? 400 : 1000;
 
     const timer = setTimeout(() => {
       setFadingOut(true);
@@ -32,11 +29,11 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         if (user && path === '/') {
           navigate('/dashboard');
         }
-      }, 300);
+      }, 250);
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [user, loading, path, navigate, onComplete]);
+  }, [user, path, navigate, onComplete]);
 
   return (
     <div

@@ -8,6 +8,7 @@ interface AuthContextType {
   loading: boolean;
   isConfigured: boolean;
   signInWithGoogle: () => Promise<UserProfile>;
+  signInAsStudent: (name?: string, email?: string) => UserProfile;
   signOut: () => Promise<void>;
   getIdToken: () => Promise<string | null>;
 }
@@ -18,6 +19,9 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isConfigured: false,
   signInWithGoogle: async () => {
+    throw new Error('Auth not initialized');
+  },
+  signInAsStudent: () => {
     throw new Error('Auth not initialized');
   },
   signOut: async () => {},
@@ -52,6 +56,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return profile;
   };
 
+  const signInAsStudent = (name?: string, email?: string) => {
+    const profile = authService.signInAsStudent(name, email);
+    setSession({
+      user: profile,
+      token: 'local_token_' + Date.now(),
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    });
+    return profile;
+  };
+
   const signOut = async () => {
     await authService.signOut();
     setSession({ user: null, token: null, expiresAt: null });
@@ -69,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         isConfigured: authService.isConfigured(),
         signInWithGoogle,
+        signInAsStudent,
         signOut,
         getIdToken,
       }}

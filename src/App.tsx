@@ -15,6 +15,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 function AppContent() {
   const { path, navigate } = useRouter();
@@ -100,10 +101,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <RouterProvider>
-        <AppContent />
-      </RouterProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <RouterProvider>
+          <AppContent />
+        </RouterProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

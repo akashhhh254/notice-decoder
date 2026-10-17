@@ -1,0 +1,6 @@
+{
+  "name": "Notice Decoder",
+  "description": "Transform ambiguous college circulars, notices, and memos into structured events, verified deadlines, and actionable checklists.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

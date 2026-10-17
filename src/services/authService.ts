@@ -206,6 +206,9 @@ export const authService = {
       email: cleanEmail,
       displayName: displayName.trim() || cleanEmail.split('@')[0],
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+      role: 'student',
+      department: 'Computer Science & Engineering',
+      batchYear: '2026',
       createdAt: new Date().toISOString(),
     };
 

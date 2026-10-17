@@ -106,6 +106,34 @@ class AuditService {
     return newEntry;
   }
 
+  async log(entry: {
+    actorId?: string;
+    actorEmail?: string;
+    actorRole?: UserRole;
+    action: any;
+    targetType?: any;
+    targetId?: string;
+    summary?: string;
+    details?: any;
+    userId?: string;
+    userDisplayName?: string;
+    userRole?: UserRole;
+  }): Promise<AuditLogEntry> {
+    return this.logAction({
+      userId: entry.userId || entry.actorId || 'system',
+      userDisplayName: entry.userDisplayName || entry.actorEmail || 'Authorized User',
+      userRole: entry.userRole || entry.actorRole || 'coordinator',
+      action:
+        typeof entry.action === 'string' && entry.action.toUpperCase() === entry.action
+          ? (entry.action as any)
+          : (String(entry.action).toUpperCase().replace(/\s+/g, '_') as any),
+      targetType: entry.targetType || 'notice',
+      targetId: entry.targetId || 'unknown',
+      summary: entry.summary || `${entry.action} on ${entry.targetType || 'notice'} ${entry.targetId || ''}`,
+      details: entry.details,
+    });
+  }
+
   async getLogs(options?: {
     targetId?: string;
     action?: string;

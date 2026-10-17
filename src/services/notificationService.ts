@@ -127,6 +127,13 @@ class NotificationService {
     this.persist();
   }
 
+  clearAll(userId: string): void {
+    this.notifications = this.notifications.filter(
+      (n) => n.userId !== userId && !(n.userId === 'user_demo_student_01' && userId === 'user_demo_student_01')
+    );
+    this.persist();
+  }
+
   async sendNotification(
     notification: Omit<InAppNotification, 'id' | 'createdAt' | 'read'>
   ): Promise<InAppNotification> {

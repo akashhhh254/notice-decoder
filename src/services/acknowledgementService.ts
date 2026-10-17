@@ -236,6 +236,12 @@ class AcknowledgementService {
   async getAllAcknowledgementsForNotice(noticeId: string): Promise<AcknowledgementRecord[]> {
     return this.records.filter((r) => r.noticeId === noticeId);
   }
+
+  getUserAcknowledgements(userId: string): AcknowledgementRecord[] {
+    return this.records.filter(
+      (r) => r.userId === userId || (!r.userId && userId === 'user_demo_student_01')
+    );
+  }
 }
 
 export const acknowledgementService = new AcknowledgementService();

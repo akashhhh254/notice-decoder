@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { RouterProvider, useRouter } from './context/RouterContext';
 import { AuthProvider } from './context/AuthContext';
 import { DemoPersonaBanner } from './components/DemoPersonaBanner';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
+import { SplashScreen } from './components/SplashScreen';
 import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { TimetablePage } from './pages/TimetablePage';
@@ -18,6 +19,27 @@ import { NotFoundPage } from './pages/NotFoundPage';
 
 function AppContent() {
   const { path } = useRouter();
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return !sessionStorage.getItem('nd_splash_dismissed');
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
+
+  const handleSplashComplete = () => {
+    setShowSplash(false);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('nd_splash_dismissed', 'true');
+      } catch {
+        // ignore
+      }
+    }
+  };
 
   let PageComponent = NotFoundPage;
 
@@ -45,6 +67,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#faf9f6] text-slate-900 font-sans selection:bg-sky-200 selection:text-sky-900">
+      {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
       <DemoPersonaBanner />
       <Navbar />
       <main className="flex-1">

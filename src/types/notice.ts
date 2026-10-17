@@ -9,6 +9,7 @@ export type NoticeType =
   | 'event'
   | 'deadline'
   | 'scholarship'
+  | 'placement'
   | 'administrative'
   | 'general';
 
@@ -26,7 +27,8 @@ export type ExtractionSource =
   | 'gemini_multimodal'
   | 'gemini_text'
   | 'deterministic_parser'
-  | 'sample_fixture';
+  | 'sample_fixture'
+  | 'official_circular';
 
 export type NoticeStatus = 'draft' | 'reviewed' | 'confirmed' | 'archived';
 

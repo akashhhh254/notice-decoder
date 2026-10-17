@@ -21,25 +21,24 @@ import {
   Trash2,
   ChevronRight,
   Inbox,
-  Filter,
   CheckSquare,
-  HardDrive,
-  ExternalLink,
+  Square,
+  Search,
   BookOpen,
   Building2,
-  ShieldCheck,
-  Send,
+  UploadCloud,
 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
   const { navigate } = useRouter();
-  const { user, isSupabase } = useAuth();
+  const { user } = useAuth();
   const [notices, setNotices] = useState<NoticeDecoded[]>([]);
   const [coordinatorNotices, setCoordinatorNotices] = useState<CoordinatorNotice[]>([]);
   const [userAcks, setUserAcks] = useState<Record<string, AcknowledgementRecord>>({});
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'needs_review' | 'confirmed' | 'exam' | 'event'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [resetting, setResetting] = useState(false);
 
   const loadData = async () => {
@@ -81,7 +80,7 @@ export const DashboardPage: React.FC = () => {
   }, [user]);
 
   const handleResetToSamples = async () => {
-    if (window.confirm('Reset local notices to standard realistic college demo notices? Any custom edits will be restored to defaults.')) {
+    if (window.confirm('Reset notices to standard realistic college notice samples? Any custom edits will be restored to defaults.')) {
       setResetting(true);
       try {
         const restored = await noticeRepository.resetToSamples();
@@ -100,17 +99,47 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
-  // Filter notices
+  const handleToggleTask = async (noticeId: string, taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const targetNotice = notices.find((n) => n.id === noticeId);
+    if (!targetNotice) return;
+
+    const updatedChecklist = targetNotice.checklist.map((item) =>
+      item.id === taskId ? { ...item, completed: !item.completed } : item
+    );
+
+    const updatedNotice = {
+      ...targetNotice,
+      checklist: updatedChecklist,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await noticeRepository.save(updatedNotice);
+    setNotices((prev) => prev.map((n) => (n.id === noticeId ? updatedNotice : n)));
+  };
+
+  // Filter notices by category and search query
   const filteredNotices = useMemo(() => {
     return notices.filter((n) => {
-      if (selectedFilter === 'all') return true;
-      if (selectedFilter === 'needs_review') return n.uncertainties.some((u) => !u.resolved);
-      if (selectedFilter === 'confirmed') return n.status === 'confirmed';
-      if (selectedFilter === 'exam') return n.noticeType === 'exam';
-      if (selectedFilter === 'event') return n.noticeType === 'event';
+      // Category filter
+      if (selectedFilter === 'needs_review' && !n.uncertainties.some((u) => !u.resolved)) return false;
+      if (selectedFilter === 'confirmed' && n.status !== 'confirmed') return false;
+      if (selectedFilter === 'exam' && n.noticeType !== 'exam') return false;
+      if (selectedFilter === 'event' && n.noticeType !== 'event') return false;
+
+      // Search filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesTitle = n.noticeTitle.toLowerCase().includes(q);
+        const matchesSummary = n.plainLanguageSummary.toLowerCase().includes(q);
+        const matchesDept = n.department?.toLowerCase().includes(q);
+        const matchesRef = n.referenceNumber?.toLowerCase().includes(q);
+        return matchesTitle || matchesSummary || matchesDept || matchesRef;
+      }
+
       return true;
     });
-  }, [notices, selectedFilter]);
+  }, [notices, selectedFilter, searchQuery]);
 
   // Aggregate upcoming deadlines from all notices
   const upcomingDeadlines = useMemo(() => {
@@ -158,21 +187,21 @@ export const DashboardPage: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-            <span>Student Workspace</span>
+            <span>Student Dashboard</span>
             <span aria-hidden="true">·</span>
-            <span>{user ? user.displayName : 'Authenticated Student'}</span>
+            <span>{user ? user.displayName : 'Alex Rivera'}</span>
             <span aria-hidden="true">·</span>
-            <span>Phase 2 Production</span>
+            <span className="text-slate-600 font-medium">CS Batch 2026</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-            Notices & Academic Schedules
+            Academic Schedule & Notices
           </h1>
           <p className="text-sm text-slate-600 mt-1">
             Review decoded circulars, monitor schedule clashes with your weekly timetable, and track verified task deadlines.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <button
             onClick={() => navigate('/timetable')}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
@@ -209,19 +238,6 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Storage & Privacy Note Banner */}
-      <div className="px-4 py-3 bg-sky-50/70 border border-sky-200/80 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-sky-950">
-        <div className="flex items-center gap-2">
-          <HardDrive className="w-4 h-4 text-sky-700 shrink-0" />
-          <span>
-            <strong>Phase 2 Active Profile:</strong> {user ? `${user.displayName} (${user.email})` : 'Student Account'} · {isSupabase ? 'PostgreSQL RLS Active' : 'Isolated Local Development Adapter'}
-          </span>
-        </div>
-        <span className="font-mono text-[11px] text-sky-800 shrink-0">
-          {notices.length} active notices · {timetable.length} weekly classes
-        </span>
-      </div>
-
       {/* Metrics Row (4-column factual count grid) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="p-5 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-1">
@@ -235,7 +251,7 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         <div className="p-5 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-1">
-          <span className="text-xs font-semibold text-slate-600">Active Action Items</span>
+          <span className="text-xs font-semibold text-slate-600">Active Action Tasks</span>
           <div className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
             {upcomingDeadlines.length}
           </div>
@@ -245,7 +261,7 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         <div className="p-5 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-1">
-          <span className="text-xs font-semibold text-slate-600">Uncertainties Flagged</span>
+          <span className="text-xs font-semibold text-slate-600">Uncertainties to Verify</span>
           <div className="text-2xl font-bold font-mono text-amber-800 tabular-nums">
             {totalUnresolved}
           </div>
@@ -275,7 +291,7 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column: Notices List & Filters (8 cols) */}
         <div className="lg:col-span-8 space-y-6">
-          {/* Phase 3: Official Institutional Circulars & Cohort Feed */}
+          {/* Official Institutional Circulars & Cohort Feed */}
           {coordinatorNotices.length > 0 && (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -358,9 +374,19 @@ export const DashboardPage: React.FC = () => {
             </div>
           )}
 
-          <div className="flex items-center justify-between pt-2">
+          {/* Search & Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
             <h2 className="text-sm font-bold text-slate-900">Your Decoded Notices</h2>
-            <span className="text-xs text-slate-500">{notices.length} personal notices</span>
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search notices..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-600 focus:border-transparent text-slate-900 bg-white"
+              />
+            </div>
           </div>
 
           {/* Filter Bar (Segmented Controls) */}
@@ -433,25 +459,29 @@ export const DashboardPage: React.FC = () => {
               <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
                 <Inbox className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-semibold text-slate-900">No notices in this view</h3>
+              <h3 className="text-base font-semibold text-slate-900">
+                {searchQuery ? 'No notices matching your search' : 'No notices in this view'}
+              </h3>
               <p className="text-xs text-slate-600 max-w-sm mx-auto">
                 {notices.length === 0
-                  ? 'Your local storage has no notices yet. Decode your first official circular or load realistic demo notices.'
-                  : 'No notices match the selected filter category.'}
+                  ? 'You have not uploaded any college notices yet. Upload your first circular PDF, image, or text to extract deadlines.'
+                  : searchQuery
+                  ? 'Try clearing your search query or choosing a different filter.'
+                  : 'No notices match the selected category filter.'}
               </p>
               <div className="flex items-center justify-center gap-3 pt-2">
                 <button
                   onClick={() => navigate('/notices/new')}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 cursor-pointer"
                 >
                   Decode a Notice
                 </button>
                 {notices.length === 0 && (
                   <button
                     onClick={handleResetToSamples}
-                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200"
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 cursor-pointer"
                   >
-                    Load Demo Notices
+                    Load Sample Notices
                   </button>
                 )}
               </div>
@@ -468,7 +498,6 @@ export const DashboardPage: React.FC = () => {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="space-y-1">
-                        {/* Zero-Pill Unboxed Metadata */}
                         <div className="flex items-center gap-2 text-xs text-slate-500">
                           <span className="font-semibold text-slate-800 capitalize">
                             {notice.noticeType}
@@ -486,7 +515,6 @@ export const DashboardPage: React.FC = () => {
                         </h3>
                       </div>
 
-                      {/* Status / Urgency */}
                       <div className="flex items-center gap-2 shrink-0">
                         {notice.status === 'confirmed' ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
@@ -505,7 +533,7 @@ export const DashboardPage: React.FC = () => {
                         <button
                           onClick={(e) => handleDelete(notice.id, e)}
                           title="Delete notice record"
-                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded hover:bg-slate-100 transition-colors cursor-pointer"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -516,7 +544,6 @@ export const DashboardPage: React.FC = () => {
                       {notice.plainLanguageSummary}
                     </p>
 
-                    {/* Footer Row */}
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                       <div className="flex items-center gap-3 font-mono">
                         <span>{notice.events.length} timetable entries</span>
@@ -552,23 +579,44 @@ export const DashboardPage: React.FC = () => {
                 {upcomingDeadlines.map((dl) => (
                   <div
                     key={dl.id}
-                    onClick={() => navigate(`/notices/${dl.noticeId}`)}
-                    className="p-3 rounded-lg border border-slate-100 bg-slate-50/70 hover:bg-sky-50/50 hover:border-sky-200 transition-all cursor-pointer space-y-1"
+                    className="p-3 rounded-lg border border-slate-100 bg-slate-50/70 hover:bg-sky-50/50 hover:border-sky-200 transition-all space-y-1.5"
                   >
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="font-mono text-rose-800 font-semibold">
                         Due: {formatDisplayDate(dl.deadline)}
                       </span>
-                      {dl.completed && (
-                        <span className="text-emerald-700 font-medium flex items-center gap-0.5">
-                          <CheckCircle2 className="w-3 h-3" /> Done
-                        </span>
-                      )}
+                      <button
+                        onClick={(e) => handleToggleTask(dl.noticeId, dl.id, e)}
+                        className={`text-[11px] font-medium flex items-center gap-1 cursor-pointer ${
+                          dl.completed ? 'text-emerald-700' : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                        title={dl.completed ? 'Mark as incomplete' : 'Mark as completed'}
+                      >
+                        {dl.completed ? (
+                          <>
+                            <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Done</span>
+                          </>
+                        ) : (
+                          <>
+                            <Square className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Mark done</span>
+                          </>
+                        )}
+                      </button>
                     </div>
-                    <p className="text-xs font-medium text-slate-800 line-clamp-2">
+                    <p
+                      onClick={() => navigate(`/notices/${dl.noticeId}`)}
+                      className={`text-xs font-medium cursor-pointer hover:text-sky-800 line-clamp-2 ${
+                        dl.completed ? 'line-through text-slate-400' : 'text-slate-800'
+                      }`}
+                    >
                       {dl.task}
                     </p>
-                    <div className="text-[11px] text-slate-500 truncate pt-0.5">
+                    <div
+                      onClick={() => navigate(`/notices/${dl.noticeId}`)}
+                      className="text-[11px] text-slate-500 truncate pt-0.5 cursor-pointer hover:underline"
+                    >
                       {dl.noticeTitle}
                     </div>
                   </div>
@@ -577,19 +625,20 @@ export const DashboardPage: React.FC = () => {
             )}
           </div>
 
-          {/* Quick Intake Shortcut Widget */}
+          {/* Quick Notice Intake Card */}
           <div className="p-5 bg-sky-50/60 border border-sky-200/80 rounded-xl space-y-3">
-            <h4 className="text-xs font-bold text-sky-950 uppercase tracking-wider">
-              Quick Notice Intake
+            <h4 className="text-xs font-bold text-sky-950 uppercase tracking-wider flex items-center gap-1.5">
+              <UploadCloud className="w-4 h-4 text-sky-700" />
+              <span>Decode New Circular</span>
             </h4>
             <p className="text-xs text-sky-900/80 leading-relaxed">
-              Have a fresh college circular or PDF? Paste or upload it directly for automated structuring.
+              Have a fresh college circular or PDF? Upload or paste it directly to extract structured events and deadlines.
             </p>
             <button
               onClick={() => navigate('/notices/new')}
-              className="w-full py-2.5 px-3 text-xs font-semibold text-white bg-sky-800 hover:bg-sky-900 rounded-lg transition-colors text-center shadow-xs"
+              className="w-full py-2.5 px-3 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors text-center shadow-xs cursor-pointer"
             >
-              Open Intake Studio
+              Upload Notice
             </button>
           </div>
         </div>

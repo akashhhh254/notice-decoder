@@ -1,27 +1,41 @@
 import React, { useState } from 'react';
 import { useRouter } from '../context/RouterContext';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Mail, ArrowRight, AlertCircle, ShieldCheck, UserCheck } from 'lucide-react';
+import { Lock, Mail, ArrowRight, AlertCircle, Eye, EyeOff, UserCheck } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { navigate } = useRouter();
+  const { navigate, params } = useRouter();
   const { signIn, isSupabase } = useAuth();
 
   const [email, setEmail] = useState('student@college.edu');
   const [password, setPassword] = useState('Academic2026!');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setErrorMessage('Please enter your academic email address.');
+      return;
+    }
+    if (!password) {
+      setErrorMessage('Please enter your password.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await signIn(email, password);
-      navigate('/dashboard');
+      await signIn(cleanEmail, password);
+      // If there's a redirect query parameter or saved destination
+      const destination = params?.redirect ? decodeURIComponent(params.redirect) : '/dashboard';
+      navigate(destination);
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to sign in. Please check credentials.');
+      setErrorMessage(err?.message || 'Invalid email or password. Please verify credentials.');
     } finally {
       setLoading(false);
     }
@@ -30,7 +44,7 @@ export const LoginPage: React.FC = () => {
   return (
     <div className="max-w-md mx-auto px-4 py-16 space-y-6">
       <div className="text-center space-y-2">
-        <div className="w-10 h-10 rounded-lg bg-sky-700 text-white flex items-center justify-center font-bold text-sm mx-auto shadow-xs">
+        <div className="w-10 h-10 rounded-lg bg-sky-700 text-white flex items-center justify-center font-bold text-sm mx-auto shadow-xs font-mono">
           ND
         </div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
@@ -57,6 +71,7 @@ export const LoginPage: React.FC = () => {
               <input
                 type="email"
                 required
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="student@college.edu"
@@ -70,13 +85,22 @@ export const LoginPage: React.FC = () => {
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-600 focus:border-transparent text-slate-900 bg-white"
+                className="w-full pl-9 pr-9 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-600 focus:border-transparent text-slate-900 bg-white"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
@@ -100,7 +124,7 @@ export const LoginPage: React.FC = () => {
           <span>Don&apos;t have an account?</span>
           <button
             onClick={() => navigate('/auth/signup')}
-            className="font-semibold text-sky-700 hover:text-sky-900 hover:underline"
+            className="font-semibold text-sky-700 hover:text-sky-900 hover:underline cursor-pointer"
           >
             Create Student Account
           </button>

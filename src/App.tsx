@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { RouterProvider, useRouter } from './context/RouterContext';
-import { AuthProvider } from './context/AuthContext';
-import { DemoPersonaBanner } from './components/DemoPersonaBanner';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { SplashScreen } from './components/SplashScreen';
@@ -18,7 +17,8 @@ import { SignupPage } from './pages/SignupPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 function AppContent() {
-  const { path } = useRouter();
+  const { path, navigate } = useRouter();
+  const { user, loading } = useAuth();
   const [showSplash, setShowSplash] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -40,6 +40,16 @@ function AppContent() {
       }
     }
   };
+
+  // Protected route enforcement
+  useEffect(() => {
+    if (!loading && !user) {
+      const protectedPaths = ['/dashboard', '/coordinator', '/settings'];
+      if (protectedPaths.includes(path)) {
+        navigate(`/auth/login?redirect=${encodeURIComponent(path)}`);
+      }
+    }
+  }, [user, loading, path, navigate]);
 
   let PageComponent = NotFoundPage;
 
@@ -68,7 +78,6 @@ function AppContent() {
   return (
     <div className="min-h-screen flex flex-col bg-[#faf9f6] text-slate-900 font-sans selection:bg-sky-200 selection:text-sky-900">
       {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
-      <DemoPersonaBanner />
       <Navbar />
       <main className="flex-1">
         <PageComponent />

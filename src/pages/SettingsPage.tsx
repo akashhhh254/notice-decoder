@@ -16,16 +16,17 @@ import {
   ArrowRight,
   ShieldAlert,
   ShieldCheck,
-  FileCheck,
+  Building2,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
   const { navigate } = useRouter();
-  const { user, signOut, isSupabase } = useAuth();
+  const { user, signOut, isSupabase, isCoordinator, switchPersona } = useAuth();
 
   const [timezone, setTimezone] = useState(user?.timezone || 'UTC');
-  const [migrationStatus, setMigrationStatus] = useState<string | null>(null);
-  const [isMigrating, setIsMigrating] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
   const handleSavePreferences = (e: React.FormEvent) => {
@@ -34,20 +35,19 @@ export const SettingsPage: React.FC = () => {
     setTimeout(() => setSuccessToast(null), 3000);
   };
 
-  const handleMigratePhase1Data = async () => {
-    setIsMigrating(true);
-    setMigrationStatus('Auditing Phase 1 local notices...');
+  const handleSyncNotices = async () => {
+    setIsSyncing(true);
+    setSyncStatus('Checking local notice records...');
 
     try {
       const localNotices = await noticeRepository.getAll();
       if (localNotices.length === 0) {
-        setMigrationStatus('No local notices found to migrate.');
+        setSyncStatus('No unassigned notices found to sync.');
         return;
       }
 
-      setMigrationStatus(`Found ${localNotices.length} notices. Linking to account ${user?.email || 'authenticated'}...`);
+      setSyncStatus(`Found ${localNotices.length} notices. Verifying ownership with account ${user?.email || 'authenticated'}...`);
 
-      // Update user ownership
       for (const notice of localNotices) {
         await noticeRepository.save({
           ...notice,
@@ -55,14 +55,25 @@ export const SettingsPage: React.FC = () => {
         });
       }
 
-      setMigrationStatus(`Successfully verified and migrated ${localNotices.length} notices into your active account.`);
-      setSuccessToast('Migration completed.');
+      setSyncStatus(`Successfully synced and updated ${localNotices.length} notices in your account.`);
+      setSuccessToast('Sync completed.');
       setTimeout(() => setSuccessToast(null), 4000);
     } catch (err: any) {
-      setMigrationStatus(`Migration error: ${err.message}`);
+      setSyncStatus(`Sync error: ${err.message}`);
     } finally {
-      setIsMigrating(false);
+      setIsSyncing(false);
     }
+  };
+
+  const handleToggleRole = async () => {
+    if (isCoordinator) {
+      await switchPersona('student');
+      setSuccessToast('Switched to Student role.');
+    } else {
+      await switchPersona('coordinator');
+      setSuccessToast('Switched to Coordinator role.');
+    }
+    setTimeout(() => setSuccessToast(null), 3000);
   };
 
   const handleExportUserData = async () => {
@@ -111,39 +122,35 @@ export const SettingsPage: React.FC = () => {
       {/* Header */}
       <div className="pb-4 border-b border-slate-200">
         <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-          <span>Student Workspace</span>
+          <span>Settings</span>
           <span aria-hidden="true">·</span>
           <span>Account & Security</span>
-          <span aria-hidden="true">·</span>
-          <span>Phase 2</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-          Settings & Data Governance
+          Settings & Account Management
         </h1>
         <p className="text-xs sm:text-sm text-slate-600 mt-1">
-          Manage your academic profile, preferred calendar timezone, Phase 1 data migration, and data deletion.
-        </p>
-      </div>
-
-      {/* Storage Architecture Disclosure */}
-      <div className="p-4 bg-sky-50 border border-sky-100 rounded-xl space-y-2 text-xs text-sky-950">
-        <div className="flex items-center gap-2 font-bold">
-          <HardDrive className="w-4 h-4 text-sky-700 shrink-0" />
-          <span>Active Architecture Mode: {isSupabase ? 'Supabase PostgreSQL & Auth' : 'Local Isolated Development Store'}</span>
-        </div>
-        <p className="text-sky-900/80 leading-relaxed">
-          {isSupabase
-            ? 'Your notices and timetable are securely synced with PostgreSQL with Row Level Security (RLS) policies enforcing user isolation.'
-            : 'Notice Decoder is running in local development mode. User accounts and records are isolated per profile on this system.'}
+          Manage your academic profile, calendar timezone, data backup, and privacy preferences.
         </p>
       </div>
 
       {/* Profile & Preferences */}
       <div className="p-6 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-5">
-        <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-          <User className="w-4 h-4 text-sky-700" />
-          <span>Student Profile & Regional Settings</span>
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <User className="w-4 h-4 text-sky-700" />
+            <span>Student Profile & Regional Settings</span>
+          </h2>
+          <span
+            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+              isCoordinator
+                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                : 'bg-sky-100 text-sky-800 border border-sky-200'
+            }`}
+          >
+            {isCoordinator ? 'COORDINATOR' : 'STUDENT'}
+          </span>
+        </div>
 
         <form onSubmit={handleSavePreferences} className="space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -189,53 +196,59 @@ export const SettingsPage: React.FC = () => {
             </select>
           </div>
 
-          <div className="pt-2">
+          <div className="pt-2 flex items-center gap-3">
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors shadow-xs"
+              className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors shadow-xs cursor-pointer"
             >
               Save Preferences
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleRole}
+              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5 text-slate-500" />
+              <span>Switch to {isCoordinator ? 'Student' : 'Coordinator'} Role</span>
             </button>
           </div>
         </form>
       </div>
 
-      {/* Migration Assistant (Phase 1 to Phase 2) */}
+      {/* Sync Local Notices */}
       <div className="p-6 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Upload className="w-4 h-4 text-sky-700" />
-              <span>Phase 1 Local Data Migration Assistant</span>
-            </h2>
-            <p className="text-xs text-slate-600">
-              Transfer existing notices stored during Phase 1 anonymous browsing into your authenticated user account.
-            </p>
-          </div>
+        <div className="space-y-1">
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <Upload className="w-4 h-4 text-sky-700" />
+            <span>Sync Notice Records</span>
+          </h2>
+          <p className="text-xs text-slate-600">
+            Verify and associate your saved notice records with your active session.
+          </p>
         </div>
 
-        {migrationStatus && (
+        {syncStatus && (
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-800">
-            {migrationStatus}
+            {syncStatus}
           </div>
         )}
 
         <button
-          onClick={handleMigratePhase1Data}
-          disabled={isMigrating}
-          className="px-4 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center gap-1.5"
+          onClick={handleSyncNotices}
+          disabled={isSyncing}
+          className="px-4 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center gap-1.5 cursor-pointer"
         >
-          <span>Audit & Transfer Phase 1 Records</span>
+          <span>Sync Saved Notices</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      {/* Phase 3 Privacy, GDPR Data Export & Retention Controls */}
+      {/* Privacy & Personal Data Governance */}
       <div className="p-6 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-4">
         <div className="space-y-1">
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-700" />
-            <span>Privacy & Personal Data Governance (GDPR Compliance)</span>
+            <span>Privacy & Data Portability</span>
           </h2>
           <p className="text-xs text-slate-600 leading-relaxed">
             Notice Decoder operates under strict data minimization. Your personal schedule entries, uploaded circulars, and verified task completions belong exclusively to you.
@@ -243,18 +256,18 @@ export const SettingsPage: React.FC = () => {
         </div>
 
         <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1.5">
-          <span className="font-semibold text-slate-800 block">Data Retention & Compliance Architecture:</span>
+          <span className="font-semibold text-slate-800 block">Data Handling Safeguards:</span>
           <ul className="list-disc list-inside space-y-0.5 text-slate-600 text-[11px]">
-            <li>Personal notices & weekly timetables: Retained for active semester duration or until user deletion.</li>
-            <li>Institutional notice acknowledgements: Timestamped hash retained in audit log for university examination eligibility verification.</li>
-            <li>Private uploaded documents: Kept in private storage bucket with short-lived signed URLs.</li>
+            <li>Personal notices & weekly timetables: Maintained for your active semester schedule.</li>
+            <li>Source quotations: Verbatim extracts preserved alongside structured entries for verification.</li>
+            <li>No tracking or external analytics cookies: Kept private to your academic session.</li>
           </ul>
         </div>
 
         <div>
           <button
             onClick={handleExportUserData}
-            className="px-4 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center gap-2"
+            className="px-4 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center gap-2 cursor-pointer"
           >
             <Download className="w-4 h-4 text-sky-700" />
             <span>Download Complete Data Archive (.JSON)</span>
@@ -262,7 +275,7 @@ export const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Danger Zone: Data & Account Deletion */}
+      {/* Danger Zone */}
       <div className="p-6 bg-rose-50/50 border border-rose-200 rounded-xl space-y-4">
         <div className="space-y-1">
           <h2 className="text-base font-bold text-rose-900 flex items-center gap-2">
@@ -276,7 +289,7 @@ export const SettingsPage: React.FC = () => {
 
         <button
           onClick={handleDeleteAllUserData}
-          className="px-4 py-2 text-xs font-semibold text-white bg-rose-700 hover:bg-rose-800 rounded-lg transition-colors flex items-center gap-2 shadow-xs"
+          className="px-4 py-2 text-xs font-semibold text-white bg-rose-700 hover:bg-rose-800 rounded-lg transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
         >
           <Trash2 className="w-3.5 h-3.5" />
           <span>Permanently Delete All Account Data</span>

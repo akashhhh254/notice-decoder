@@ -1,9 +1,11 @@
 import React from 'react';
 import { useRouter } from '../context/RouterContext';
-import { ShieldCheck, HardDrive, Cpu, Layers } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { ShieldCheck, HardDrive, Calendar, FileText, CheckSquare } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   const { navigate } = useRouter();
+  const { user } = useAuth();
 
   return (
     <footer className="border-t border-slate-200 bg-[#faf9f6] text-slate-600 mt-20">
@@ -20,11 +22,11 @@ export const Footer: React.FC = () => {
               Transforms ambiguous university circulars, exam notifications, and academic memos into verified schedules, concrete deadlines, and actionable student checklists.
             </p>
             <div className="flex items-center gap-2 text-xs text-slate-500 pt-1">
-              <span>Phase 1 Architecture</span>
+              <span>Zero-hallucination policy</span>
               <span aria-hidden="true">·</span>
-              <span>Client-side repository</span>
+              <span>Evidence-backed extraction</span>
               <span aria-hidden="true">·</span>
-              <span>Gemini 3.8 Flash & Deterministic Parsing</span>
+              <span>Timetable clash audits</span>
             </div>
           </div>
 
@@ -36,15 +38,15 @@ export const Footer: React.FC = () => {
               <li>
                 <button
                   onClick={() => navigate('/')}
-                  className="hover:text-slate-900 transition-colors"
+                  className="hover:text-slate-900 transition-colors cursor-pointer"
                 >
-                  Product Overview
+                  Overview
                 </button>
               </li>
               <li>
                 <button
-                  onClick={() => navigate('/dashboard')}
-                  className="hover:text-slate-900 transition-colors"
+                  onClick={() => navigate(user ? '/dashboard' : '/auth/login')}
+                  className="hover:text-slate-900 transition-colors cursor-pointer"
                 >
                   Student Dashboard
                 </button>
@@ -52,9 +54,17 @@ export const Footer: React.FC = () => {
               <li>
                 <button
                   onClick={() => navigate('/notices/new')}
-                  className="hover:text-slate-900 transition-colors"
+                  className="hover:text-slate-900 transition-colors cursor-pointer"
                 >
-                  Intake & Upload Studio
+                  Upload Notice
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => navigate('/timetable')}
+                  className="hover:text-slate-900 transition-colors cursor-pointer"
+                >
+                  My Timetable
                 </button>
               </li>
             </ul>
@@ -62,22 +72,34 @@ export const Footer: React.FC = () => {
 
           <div>
             <h4 className="text-xs font-semibold text-slate-900 tracking-wider uppercase mb-3">
-              Phase Roadmap
+              Student Tools
             </h4>
-            <div className="space-y-2 text-xs text-slate-600">
-              <div className="flex items-start gap-1.5">
-                <span className="font-semibold text-sky-800 shrink-0">Phase 1:</span>
-                <span>Responsive intake, extraction schema, conflict audits & local storage.</span>
-              </div>
-              <div className="flex items-start gap-1.5">
-                <span className="font-semibold text-slate-700 shrink-0">Phase 2:</span>
-                <span>User accounts, PostgreSQL, clash detector & .ics export.</span>
-              </div>
-              <div className="flex items-start gap-1.5">
-                <span className="font-semibold text-slate-700 shrink-0">Phase 3:</span>
-                <span>Coordinator tools, batch acknowledgements & institutional portal.</span>
-              </div>
-            </div>
+            <ul className="space-y-2 text-sm">
+              <li>
+                <button
+                  onClick={() => navigate('/calendar')}
+                  className="hover:text-slate-900 transition-colors cursor-pointer"
+                >
+                  Academic Calendar & Export
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => navigate('/settings')}
+                  className="hover:text-slate-900 transition-colors cursor-pointer"
+                >
+                  Privacy & Settings
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => navigate(user ? '/dashboard' : '/auth/login')}
+                  className="hover:text-slate-900 transition-colors cursor-pointer"
+                >
+                  {user ? 'My Account' : 'Student Sign In'}
+                </button>
+              </li>
+            </ul>
           </div>
         </div>
 
@@ -86,12 +108,12 @@ export const Footer: React.FC = () => {
             &copy; {new Date().getFullYear()} Notice Decoder. Built for student academic clarity.
           </p>
           <div className="flex items-center gap-4">
-            <span className="inline-flex items-center gap-1">
-              <HardDrive className="w-3.5 h-3.5 text-slate-400" />
-              Browser-local development storage
+            <span className="inline-flex items-center gap-1 text-slate-600">
+              <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
+              Verified source quotations
             </span>
             <span aria-hidden="true">·</span>
-            <span>WCAG 2.2 AA compliant</span>
+            <span>Accessible & responsive design</span>
           </div>
         </div>
       </div>

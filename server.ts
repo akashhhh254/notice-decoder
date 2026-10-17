@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
@@ -76,7 +77,19 @@ async function verifyFirebaseToken(token: string): Promise<{ uid: string; email?
   }
 
   // Verify project ID if configured
-  const expectedProjectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+  let expectedProjectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+  if (!expectedProjectId) {
+    try {
+      const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
+      if (fs.existsSync(configPath)) {
+        const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        expectedProjectId = raw.projectId;
+      }
+    } catch {
+      // fallback
+    }
+  }
+
   if (expectedProjectId) {
     if (payload.aud && payload.aud !== expectedProjectId) {
       console.warn(`Token audience mismatch: got ${payload.aud}, expected ${expectedProjectId}`);

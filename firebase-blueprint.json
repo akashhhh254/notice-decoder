@@ -1,0 +1,110 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile for student or academic coordinator",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique Firebase user ID (uid)",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address",
+          "maxLength": 256
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name",
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "description": "User role: student or coordinator",
+          "enum": ["student", "coordinator", "admin"],
+          "maxLength": 32
+        },
+        "timezone": {
+          "type": "string",
+          "description": "User preferred timezone",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation",
+          "maxLength": 64
+        }
+      },
+      "required": ["id", "email", "role"]
+    },
+    "Notice": {
+      "title": "Notice",
+      "description": "Decoded academic circular, timetable notice, or exam announcement",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the decoded notice",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user UID",
+          "maxLength": 128
+        },
+        "noticeTitle": {
+          "type": "string",
+          "description": "Extracted notice title",
+          "maxLength": 300
+        },
+        "noticeType": {
+          "type": "string",
+          "description": "Classification of the notice",
+          "enum": ["exam", "circular", "event", "deadline", "scholarship", "placement", "administrative", "general", "academic", "fee", "hostel", "sports"],
+          "maxLength": 64
+        },
+        "urgency": {
+          "type": "string",
+          "description": "Priority level",
+          "enum": ["normal", "low", "medium", "high", "critical"],
+          "maxLength": 32
+        },
+        "status": {
+          "type": "string",
+          "description": "Review status of decoded notice",
+          "enum": ["draft", "reviewed", "confirmed", "archived"],
+          "maxLength": 32
+        },
+        "plainLanguageSummary": {
+          "type": "string",
+          "description": "Plain language student-friendly summary",
+          "maxLength": 5000
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp",
+          "maxLength": 64
+        }
+      },
+      "required": ["id", "userId", "noticeTitle", "noticeType", "urgency", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile documents keyed by Firebase Auth UID"
+    },
+    "/notices/{noticeId}": {
+      "schema": "Notice",
+      "description": "User decoded academic notices"
+    }
+  }
+}

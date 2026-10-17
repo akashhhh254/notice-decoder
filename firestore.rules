@@ -1,0 +1,84 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-deny global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation for UserProfile
+    function isValidUserProfile(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.displayName is string && data.displayName.size() <= 128 &&
+             data.role in ['student', 'coordinator', 'admin'];
+    }
+
+    // Validation for Notice
+    function isValidNotice(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId == request.auth.uid &&
+             ((data.noticeTitle is string && data.noticeTitle.size() <= 300) || (data.title is string && data.title.size() <= 300)) &&
+             ((data.noticeType is string && data.noticeType in ['exam', 'circular', 'event', 'deadline', 'scholarship', 'placement', 'administrative', 'general', 'academic', 'fee', 'hostel', 'sports']) ||
+              (data.category is string && data.category in ['exam', 'circular', 'event', 'deadline', 'scholarship', 'placement', 'administrative', 'general', 'academic', 'fee', 'hostel', 'sports'])) &&
+             data.urgency in ['normal', 'low', 'medium', 'high', 'critical'] &&
+             data.status in ['draft', 'reviewed', 'confirmed', 'archived'];
+    }
+
+    // User profile collection
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false; // Disallow querying user profiles en masse
+      allow create: if isOwner(userId) && isValidId(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().id == userId;
+      allow update: if isOwner(userId) && isValidId(userId) &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().id == existing().id &&
+                       incoming().email == existing().email;
+      allow delete: if isOwner(userId);
+    }
+
+    // Decoded notices collection
+    match /notices/{noticeId} {
+      allow get: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(noticeId) &&
+                       isValidNotice(incoming()) &&
+                       incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(noticeId) &&
+                       existing().userId == request.auth.uid &&
+                       isValidNotice(incoming()) &&
+                       incoming().userId == existing().userId;
+      allow delete: if isSignedIn() && isValidId(noticeId) &&
+                       existing().userId == request.auth.uid;
+    }
+
+    // Connection test document
+    match /test/connection {
+      allow read: if isSignedIn();
+    }
+  }
+}

@@ -6,7 +6,8 @@ import {
   onAuthStateChanged,
   User as FirebaseUser,
 } from 'firebase/auth';
-import { firebaseAuth, googleAuthProvider, isFirebaseConfigured } from '../config/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { db, firebaseAuth, googleAuthProvider, isFirebaseConfigured } from '../config/firebase';
 import { UserProfile, AuthSession } from '../types/phase2';
 
 export type AuthCallback = (session: AuthSession) => void;
@@ -79,6 +80,15 @@ if (typeof window !== 'undefined') {
           expiresAt: Date.now() + 60 * 60 * 1000,
         };
         notifyListeners(session);
+
+        // Async write to Firestore users collection
+        if (isFirebaseConfigured && profile.id) {
+          try {
+            await setDoc(doc(db, 'users', profile.id), profile, { merge: true });
+          } catch (firestoreErr) {
+            console.warn('Could not sync user profile to Firestore:', firestoreErr);
+          }
+        }
       } catch (err) {
         console.error('Failed to retrieve Firebase ID token:', err);
         notifyListeners({ user: null, token: null, expiresAt: null });

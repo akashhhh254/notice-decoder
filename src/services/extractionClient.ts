@@ -1,5 +1,7 @@
 import { NoticeDecoded, ExtractionResponse } from '../types/notice';
 import { parseNoticeDeterministically } from './deterministicParser';
+import { extractTextFromPptx, validateUploadFile } from './documentExtractor';
+import { authService } from './authService';
 
 export interface ExtractionParams {
   text?: string;
@@ -36,7 +38,7 @@ export async function fileToText(file: File): Promise<string> {
 
 /**
  * Primary Extraction Client
- * Calls the server /api/extract endpoint and falls back gracefully to client deterministic parser if needed.
+ * Calls the server /api/extract endpoint and handles real extraction without faking.
  */
 export async function decodeNotice(params: ExtractionParams): Promise<ExtractionResponse> {
   const { text, file } = params;
@@ -46,38 +48,67 @@ export async function decodeNotice(params: ExtractionParams): Promise<Extraction
   let fileName: string | undefined;
   let fileSize: number | undefined;
   let textContent = text || '';
+  let pptxWarnings: string[] | undefined;
 
   if (file) {
+    const validation = validateUploadFile(file);
+    if (!validation.isValid) {
+      throw new Error(validation.error || 'Invalid file format.');
+    }
+
     fileName = file.name;
     fileSize = file.size;
     mimeType = file.type;
 
-    // If it's a plain text or markdown file, read as text directly
-    if (file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+    // Handle PowerPoint (.pptx)
+    if (validation.format === 'pptx') {
+      try {
+        const pptxResult = await extractTextFromPptx(file);
+        pptxWarnings = pptxResult.warnings;
+        textContent = pptxResult.text
+          ? `${textContent ? `${textContent}\n\n` : ''}${pptxResult.text}`
+          : textContent;
+      } catch (pptxErr: any) {
+        throw new Error(pptxErr?.message || 'Failed to extract text from PowerPoint slides.');
+      }
+    } else if (validation.format === 'text') {
+      // Plain text file
       try {
         const fileStr = await fileToText(file);
         textContent = textContent ? `${textContent}\n\n${fileStr}` : fileStr;
-      } catch (e) {
-        console.warn('Could not read file as text directly, using binary:', e);
+      } catch (e: any) {
+        throw new Error(`Could not read text file: ${e?.message || e}`);
       }
     }
 
+    // For multimodal processing (PDFs and images)
     try {
       const encoded = await fileToBase64(file);
       fileData = encoded.base64;
       mimeType = encoded.mimeType;
-    } catch (e) {
-      console.warn('Error encoding file to base64:', e);
+    } catch (e: any) {
+      console.warn('Could not encode file as base64:', e);
     }
   }
 
-  // Attempt server-side extraction
+  if (!textContent.trim() && !fileData) {
+    throw new Error('No readable content was provided or extracted. Please enter notice text or upload a valid file.');
+  }
+
+  // Get current Firebase ID token
+  const idToken = await authService.getIdToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (idToken) {
+    headers['Authorization'] = `Bearer ${idToken}`;
+  }
+
+  // Send to server-side extraction pipeline
   try {
     const response = await fetch('/api/extract', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         text: textContent,
         fileData,
@@ -95,17 +126,42 @@ export async function decodeNotice(params: ExtractionParams): Promise<Extraction
           data: json.data as NoticeDecoded,
           source: json.source || 'gemini_multimodal',
           message: json.message,
-          warningNotice: json.warningNotice,
+          warningNotice: pptxWarnings?.[0] || json.warningNotice,
         };
       }
+      if (json.error) {
+        throw new Error(json.error);
+      }
+    } else if (response.status === 401) {
+      throw new Error('Authentication required. Please sign in with Google to decode notices.');
+    } else {
+      const errJson = await response.json().catch(() => null);
+      if (errJson?.error) {
+        throw new Error(errJson.error);
+      }
     }
-  } catch (err) {
-    console.warn('Server API call to /api/extract was unreachable, falling back to local engine:', err);
+  } catch (err: any) {
+    // If it was an authentication error or validation error, rethrow immediately
+    if (
+      err?.message?.includes('Authentication required') ||
+      err?.message?.includes('Google sign-in') ||
+      err?.message?.includes('PowerPoint') ||
+      err?.message?.includes('Invalid file')
+    ) {
+      throw err;
+    }
+    console.warn('Server API call to /api/extract was unreachable:', err?.message || err);
   }
 
-  // Graceful client-side fallback if server is unreachable
+  // If server is unreachable or offline, decode deterministically from extracted text
+  if (!textContent.trim()) {
+    throw new Error(
+      'Document processing requires an active connection to the AI extraction service. Please ensure the server is running.'
+    );
+  }
+
   const fallbackNotice = parseNoticeDeterministically(
-    textContent || (fileName ? `Notice document: ${fileName}` : 'College Circular'),
+    textContent,
     fileName,
     mimeType,
     fileSize
@@ -115,7 +171,7 @@ export async function decodeNotice(params: ExtractionParams): Promise<Extraction
     success: true,
     data: fallbackNotice,
     source: 'deterministic_parser',
-    message: 'Decoded using client-side deterministic parser.',
-    warningNotice: 'Decoded with offline deterministic parser. Check uncertainties before confirming.',
+    message: 'Decoded using local academic text parser.',
+    warningNotice: pptxWarnings?.[0] || undefined,
   };
 }

@@ -41,20 +41,26 @@ function AppContent() {
     }
   };
 
+  const isPublicRoute = path === '/' || path === '/auth/login' || path === '/auth/signup';
+
   // Protected route enforcement
   useEffect(() => {
-    if (!loading && !user) {
-      const protectedPaths = ['/dashboard', '/coordinator', '/settings'];
-      if (protectedPaths.includes(path)) {
-        navigate(`/auth/login?redirect=${encodeURIComponent(path)}`);
-      }
+    if (!loading && !user && !isPublicRoute) {
+      navigate(`/auth/login?redirect=${encodeURIComponent(path)}`);
     }
-  }, [user, loading, path, navigate]);
+  }, [user, loading, path, isPublicRoute, navigate]);
 
   let PageComponent = NotFoundPage;
 
   if (path === '/') {
     PageComponent = LandingPage;
+  } else if (path === '/auth/login') {
+    PageComponent = LoginPage;
+  } else if (path === '/auth/signup') {
+    PageComponent = SignupPage;
+  } else if (!user && !loading) {
+    // If route is protected and user is not authenticated, fall back to LoginPage with redirect
+    PageComponent = LoginPage;
   } else if (path === '/dashboard') {
     PageComponent = DashboardPage;
   } else if (path === '/timetable') {
@@ -65,10 +71,6 @@ function AppContent() {
     PageComponent = CoordinatorPage;
   } else if (path === '/settings') {
     PageComponent = SettingsPage;
-  } else if (path === '/auth/login') {
-    PageComponent = LoginPage;
-  } else if (path === '/auth/signup') {
-    PageComponent = SignupPage;
   } else if (path === '/notices/new') {
     PageComponent = UploadPage;
   } else if (path.startsWith('/notices/')) {
@@ -80,7 +82,16 @@ function AppContent() {
       {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
       <Navbar />
       <main className="flex-1">
-        <PageComponent />
+        {loading && !isPublicRoute ? (
+          <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3 text-slate-500">
+            <div className="w-10 h-10 rounded-xl bg-sky-700 text-white flex items-center justify-center font-bold font-mono text-sm shadow-xs animate-pulse">
+              ND
+            </div>
+            <span className="text-xs font-medium">Verifying authentication session...</span>
+          </div>
+        ) : (
+          <PageComponent />
+        )}
       </main>
       <Footer />
     </div>

@@ -103,6 +103,7 @@ export interface NoticeDecoded {
   sourceEvidence: EvidencePair[];
   extractionSource: ExtractionSource;
   status: NoticeStatus;
+  userId?: string | null;
   fileName?: string | null;
   fileType?: string | null;
   fileSize?: number | null;

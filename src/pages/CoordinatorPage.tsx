@@ -38,8 +38,9 @@ import {
 } from 'lucide-react';
 
 export const CoordinatorPage: React.FC = () => {
-  const { user, isCoordinator, switchPersona } = useAuth();
+  const { user } = useAuth();
   const { navigate } = useRouter();
+  const isCoordinator = user?.role === 'coordinator' || user?.role === 'admin';
 
   const [notices, setNotices] = useState<CoordinatorNotice[]>([]);
   const [metrics, setMetrics] = useState<CoordinatorMetrics | null>(null);
@@ -91,7 +92,9 @@ export const CoordinatorPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadAllData();
+    if (isCoordinator) {
+      loadAllData();
+    }
   }, [user, isCoordinator]);
 
   // Access Control Guard
@@ -103,19 +106,12 @@ export const CoordinatorPage: React.FC = () => {
         </div>
         <h1 className="text-2xl font-bold text-slate-900 mb-2">Coordinator Access Restricted</h1>
         <p className="text-sm text-slate-600 mb-6 max-w-lg mx-auto">
-          The Coordinator Portal is restricted to verified academic administrators, department heads, and examination controllers. Your active session is currently authenticated as a student.
+          The Coordinator Portal is restricted to verified academic administrators, department heads, and examination controllers. Your active session is currently authenticated as a student ({user?.email || 'authenticated user'}).
         </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
-            onClick={() => switchPersona('coordinator')}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-xs transition-colors flex items-center justify-center gap-2"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>Switch to Dr. Eleanor Vance (Coordinator Persona)</span>
-          </button>
+        <div className="flex items-center justify-center gap-3">
           <button
             onClick={() => navigate('/dashboard')}
-            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors"
+            className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shadow-xs transition-colors"
           >
             Return to Student Dashboard
           </button>

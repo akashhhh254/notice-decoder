@@ -41,7 +41,7 @@ export const LandingPage: React.FC = () => {
 
             <div className="flex flex-wrap items-center gap-4 pt-2">
               <button
-                onClick={() => navigate(user ? '/dashboard' : '/notices/new')}
+                onClick={() => navigate(user ? '/dashboard' : '/auth/login?redirect=/dashboard')}
                 className="inline-flex items-center gap-2.5 px-6 py-3 text-sm font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors shadow-xs cursor-pointer whitespace-nowrap"
               >
                 <span>{user ? 'Go to Dashboard' : 'Get Started'}</span>
@@ -353,7 +353,7 @@ export const LandingPage: React.FC = () => {
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <button
-              onClick={() => navigate('/notices/new')}
+              onClick={() => navigate(user ? '/notices/new' : '/auth/login?redirect=/notices/new')}
               className="px-6 py-3 text-sm font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors shadow-xs cursor-pointer"
             >
               Upload Notice Now

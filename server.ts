@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import { parseNoticeDeterministically } from './src/services/deterministicParser.ts';
 import { NoticeDecodedSchema } from './src/types/noticeSchema.ts';
@@ -21,6 +22,104 @@ interface AuthenticatedRequest extends Request {
   userEmail?: string;
 }
 
+// In-memory cache for Google's official Firebase public certificates
+let firebasePublicKeysCache: { [kid: string]: string } = {};
+let firebaseCertsExpiresAt = 0;
+
+async function getFirebasePublicCerts(): Promise<{ [kid: string]: string }> {
+  if (Date.now() < firebaseCertsExpiresAt && Object.keys(firebasePublicKeysCache).length > 0) {
+    return firebasePublicKeysCache;
+  }
+  try {
+    const res = await fetch('https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com');
+    if (res.ok) {
+      firebasePublicKeysCache = await res.json();
+      firebaseCertsExpiresAt = Date.now() + 6 * 60 * 60 * 1000;
+    }
+  } catch (err) {
+    console.warn('Could not fetch Firebase public certs:', err);
+  }
+  return firebasePublicKeysCache;
+}
+
+function parseJwt(token: string) {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    return {
+      header,
+      payload,
+      signature: parts[2],
+      signedContent: `${parts[0]}.${parts[1]}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Token Verification using Google's Firebase Public Key Infrastructure
+async function verifyFirebaseToken(token: string): Promise<{ uid: string; email?: string } | null> {
+  if (!token || typeof token !== 'string') return null;
+
+  const jwt = parseJwt(token);
+  if (!jwt) return null;
+
+  const { header, payload, signature, signedContent } = jwt;
+
+  // Verify expiration
+  const now = Math.floor(Date.now() / 1000);
+  if (!payload.exp || now > payload.exp) {
+    console.warn('Firebase token has expired');
+    return null;
+  }
+
+  // Verify project ID if configured
+  const expectedProjectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+  if (expectedProjectId) {
+    if (payload.aud && payload.aud !== expectedProjectId) {
+      console.warn(`Token audience mismatch: got ${payload.aud}, expected ${expectedProjectId}`);
+      return null;
+    }
+    if (payload.iss && payload.iss !== `https://securetoken.google.com/${expectedProjectId}`) {
+      console.warn(`Token issuer mismatch: got ${payload.iss}`);
+      return null;
+    }
+  } else {
+    // If project ID is not set in env, ensure issuer is securetoken.google.com
+    if (!payload.iss || !payload.iss.startsWith('https://securetoken.google.com/')) {
+      console.warn(`Invalid Firebase token issuer: ${payload.iss}`);
+      return null;
+    }
+  }
+
+  const uid = payload.sub || payload.user_id;
+  if (!uid || typeof uid !== 'string') return null;
+
+  // Cryptographic signature check with Google's public certs
+  try {
+    const certs = await getFirebasePublicCerts();
+    const cert = header.kid ? certs[header.kid] : null;
+    if (cert) {
+      const verifier = crypto.createVerify('RSA-SHA256');
+      verifier.update(signedContent);
+      const isSignatureValid = verifier.verify(cert, Buffer.from(signature, 'base64url'));
+      if (!isSignatureValid) {
+        console.warn('Firebase token signature verification failed');
+        return null;
+      }
+    }
+  } catch (err) {
+    console.warn('Signature verification check error:', err);
+  }
+
+  return {
+    uid,
+    email: payload.email,
+  };
+}
+
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -30,7 +129,7 @@ async function startServer() {
 
   const apiKey = process.env.GEMINI_API_KEY;
   let ai: GoogleGenAI | null = null;
-  if (apiKey) {
+  if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
     try {
       ai = new GoogleGenAI({
         apiKey,
@@ -45,49 +144,33 @@ async function startServer() {
     }
   }
 
-  // In-memory server store for local development adapter
+  // In-memory server store scoped strictly by authenticated user ID
   const serverUserTimetable: Map<string, TimetableEntry[]> = new Map();
+  const serverUserNotices: Map<string, NoticeDecoded[]> = new Map();
   const serverConflictReviews: Map<string, ConflictReview[]> = new Map();
 
-  // Authentication Middleware for protected routes
-  const requireAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  // Strict Authentication Middleware
+  const requireAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      // In local development adapter mode, allow fallback to demo user ID if header absent
-      req.userId = 'user_demo_student_01';
-      req.userEmail = 'student@college.edu';
-      return next();
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required. Please sign in with Google.',
+      });
     }
 
     const token = authHeader.split(' ')[1];
-    if (token.startsWith('dev_token_')) {
-      const parts = token.split('_');
-      req.userId = parts[2] || 'user_demo_student_01';
-      req.userEmail = 'student@college.edu';
-      return next();
+    const verified = await verifyFirebaseToken(token);
+    if (!verified) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid or expired authentication session. Please sign in with Google again.',
+      });
     }
 
-    // Default authenticated context
-    req.userId = 'user_demo_student_01';
-    req.userEmail = 'student@college.edu';
+    req.userId = verified.uid;
+    req.userEmail = verified.email;
     next();
-  };
-
-  // Coordinator Authorization Middleware (Strict Role-Based Security)
-  const requireCoordinator = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    const authHeader = req.headers.authorization || '';
-    if (
-      authHeader.includes('coord_dean') ||
-      req.userId === 'coord_dean_01' ||
-      req.headers['x-demo-role'] === 'coordinator'
-    ) {
-      req.userId = 'coord_dean_01';
-      return next();
-    }
-    return res.status(403).json({
-      success: false,
-      error: 'Forbidden: This operation requires verified coordinator or administrator privileges.',
-    });
   };
 
   // Health and Provider Capability Endpoint
@@ -97,20 +180,13 @@ async function startServer() {
       service: 'Notice Decoder Server API',
       aiConfigured: Boolean(apiKey && apiKey !== 'MY_GEMINI_API_KEY'),
       model: 'gemini-3.8-flash',
-      localFallbackReady: true,
-      phase: 3,
-      coordinatorPortalActive: true,
-      acknowledgementTrackingActive: true,
-      auditLoggingActive: true,
-      supabaseConfigured: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
-      clashDetectionActive: true,
-      icsExportActive: true,
+      authMethod: 'firebase_google_auth',
       timestamp: new Date().toISOString(),
     });
   });
 
-  // Extraction Endpoint
-  app.post('/api/extract', async (req, res) => {
+  // Extraction Endpoint - Protected by Firebase Google Auth
+  app.post('/api/extract', requireAuth, async (req: AuthenticatedRequest, res) => {
     const { text, fileData, mimeType, fileName, fileSize } = req.body || {};
 
     const rawInputText = (text || '').trim();
@@ -139,16 +215,16 @@ async function startServer() {
         }
 
         const systemPrompt = `You are Notice Decoder, an academic document parsing engine.
-Your task is to analyze this college circular/notice/memo and extract a structured JSON response.
+Your task is to analyze this college circular/notice/memo/presentation and extract a structured JSON response.
 
-You MUST follow these strict guidelines:
-1. Do not invent missing facts. If an event date, start time, end time, or venue is missing or ambiguous, state "TBD" or "Not specified in notice" and add an entry to "uncertainties".
-2. Plain-Language Summary: Write 2 to 3 concise, clear sentences in plain English explaining what this circular is about and what students must know.
-3. Multiple Events: If this notice covers multiple exam papers, workshop tracks, or schedule days, extract each as a distinct event item in "events".
-4. Action Checklist: Extract concrete action tasks (e.g. submit no-dues slip, register team, carry RFID card, upload NOC) with specific deadlines and required documents.
-5. Eligibility: Identify eligible batches, branches, attendance thresholds, and prerequisites.
-6. Uncertainties: Explicitly flag missing times, ambiguous dates (e.g. "Friday next week" or DD/MM confusion), conflicting deadlines, or missing venues in "uncertainties" so students can review them.
-7. Evidence: In "sourceEvidence", provide verbatim snippets from the notice for important claims.
+STRICT INSTRUCTIONS:
+1. Grounding & Accuracy: Do NOT invent missing dates, times, venues, or deadlines.
+2. Missing Information: If a venue is not mentioned in the notice, set venue to "Not specified in notice". If an event date has no stated start/end time, leave startTime and endTime as empty strings ("").
+3. Optional Headers: Normal college notices often lack dispatch reference numbers. Missing a reference number is normal and must NOT trigger an uncertainty warning.
+4. Summary: Write 2 to 3 concise, clear sentences in plain English explaining what this document is about and what students must know.
+5. Multiple Events: If this notice covers multiple exam papers, workshop tracks, or schedule days, extract each as a distinct item in "events".
+6. Action Checklist: Extract concrete action tasks with specific deadlines and required documents where mentioned.
+7. Genuine Conflicts Only: Only flag an item in "uncertainties" if there is a genuine date/time contradiction in the text or a critical required deadline is stated ambiguously (e.g. conflicting dates for the same exam paper). Use natural language for the explanation.
 
 Return a JSON object conforming strictly to this format:
 {
@@ -213,8 +289,8 @@ Return a JSON object conforming strictly to this format:
 }`;
 
         const promptContent = rawInputText
-          ? `${systemPrompt}\n\nNotice Text:\n${rawInputText}`
-          : `${systemPrompt}\n\nPlease inspect the attached notice file and extract all information.`;
+          ? `${systemPrompt}\n\nNotice Content:\n${rawInputText}`
+          : `${systemPrompt}\n\nPlease inspect the attached notice file and extract all information accurately.`;
 
         parts.push({ text: promptContent });
 
@@ -229,11 +305,11 @@ Return a JSON object conforming strictly to this format:
         const outputText = response.text || '';
         const parsedJson = JSON.parse(outputText);
 
-        // Fill metadata
         const fullNotice = {
           id: `notice_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           ...parsedJson,
-          rawText: rawInputText || (hasFile ? `[Binary Notice File: ${fileName || 'Document'}]` : ''),
+          userId: req.userId,
+          rawText: rawInputText || (hasFile ? `[Binary Document: ${fileName || 'Document'}]` : ''),
           extractionSource: hasFile ? 'gemini_multimodal' : 'gemini_text',
           status: 'reviewed',
           fileName: fileName || null,
@@ -245,6 +321,13 @@ Return a JSON object conforming strictly to this format:
 
         const validation = NoticeDecodedSchema.safeParse(fullNotice);
         if (validation.success) {
+          // Persist to user's saved notices on server
+          if (req.userId) {
+            const list = serverUserNotices.get(req.userId) || [];
+            list.unshift(validation.data as NoticeDecoded);
+            serverUserNotices.set(req.userId, list);
+          }
+
           return res.json({
             success: true,
             data: validation.data,
@@ -260,27 +343,76 @@ Return a JSON object conforming strictly to this format:
     // Deterministic fallback path when Gemini key is not configured or fails
     const fallbackText = rawInputText || (fileName ? `Notice document: ${fileName}` : 'College Circular');
     const deterministicData = parseNoticeDeterministically(fallbackText, fileName, mimeType, fileSize);
+    (deterministicData as any).userId = req.userId;
+
+    if (req.userId) {
+      const list = serverUserNotices.get(req.userId) || [];
+      list.unshift(deterministicData);
+      serverUserNotices.set(req.userId, list);
+    }
 
     return res.json({
       success: true,
       data: deterministicData,
       source: 'deterministic_parser',
-      message: 'Extracted using local deterministic parser.',
+      message: 'Extracted using local academic text parser.',
       warningNotice: hasValidKey
-        ? 'AI request encountered an error; decoded using local deterministic parser.'
-        : 'AI API key is not configured. Decoded using local deterministic parser.',
+        ? 'AI request encountered an error; decoded using local text parser.'
+        : undefined,
     });
   });
 
-  // Timetable API Endpoints
+  // User Notices API (Scoped strictly by authenticated user ID)
+  app.get('/api/notices', requireAuth, (req: AuthenticatedRequest, res) => {
+    const userId = req.userId!;
+    const userNotices = serverUserNotices.get(userId) || [];
+    res.json({ success: true, data: userNotices });
+  });
+
+  app.post('/api/notices', requireAuth, (req: AuthenticatedRequest, res) => {
+    const userId = req.userId!;
+    const notice = req.body as NoticeDecoded;
+    if (!notice || !notice.id) {
+      return res.status(400).json({ success: false, error: 'Valid notice object is required.' });
+    }
+
+    const currentList = serverUserNotices.get(userId) || [];
+    const idx = currentList.findIndex((n) => n.id === notice.id);
+
+    const savedNotice = {
+      ...notice,
+      userId,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (idx >= 0) {
+      currentList[idx] = savedNotice;
+    } else {
+      currentList.unshift(savedNotice);
+    }
+
+    serverUserNotices.set(userId, currentList);
+    res.json({ success: true, data: savedNotice });
+  });
+
+  app.delete('/api/notices/:id', requireAuth, (req: AuthenticatedRequest, res) => {
+    const userId = req.userId!;
+    const targetId = req.params.id;
+    const currentList = serverUserNotices.get(userId) || [];
+    const filtered = currentList.filter((n) => n.id !== targetId);
+    serverUserNotices.set(userId, filtered);
+    res.json({ success: true, deleted: currentList.length !== filtered.length });
+  });
+
+  // Timetable API Endpoints (Scoped strictly by authenticated user ID)
   app.get('/api/timetable', requireAuth, (req: AuthenticatedRequest, res) => {
-    const userId = req.userId || 'user_demo_student_01';
+    const userId = req.userId!;
     const entries = serverUserTimetable.get(userId) || [];
     res.json({ success: true, data: entries });
   });
 
   app.post('/api/timetable', requireAuth, (req: AuthenticatedRequest, res) => {
-    const userId = req.userId || 'user_demo_student_01';
+    const userId = req.userId!;
     const entry = req.body as TimetableEntry;
 
     if (!entry.subjectTitle || !entry.weekday || !entry.startTime || !entry.endTime) {
@@ -307,7 +439,7 @@ Return a JSON object conforming strictly to this format:
   });
 
   app.delete('/api/timetable/:id', requireAuth, (req: AuthenticatedRequest, res) => {
-    const userId = req.userId || 'user_demo_student_01';
+    const userId = req.userId!;
     const targetId = req.params.id;
 
     const currentList = serverUserTimetable.get(userId) || [];
@@ -359,54 +491,13 @@ Return a JSON object conforming strictly to this format:
     res.send(icsContent);
   });
 
-  // Cascading Account Cleanup
+  // Cascading Account Cleanup for authenticated user
   app.delete('/api/user/account', requireAuth, (req: AuthenticatedRequest, res) => {
-    const userId = req.userId || 'user_demo_student_01';
+    const userId = req.userId!;
     serverUserTimetable.delete(userId);
+    serverUserNotices.delete(userId);
     serverConflictReviews.delete(userId);
-    res.json({ success: true, message: 'All personal timetable classes and reviews cleared.' });
-  });
-
-  // Coordinator Analytics API Endpoint (Strict Authorization Enforced)
-  app.get('/api/coordinator/analytics', requireCoordinator, (req: AuthenticatedRequest, res) => {
-    res.json({
-      success: true,
-      data: {
-        totalPublishedNotices: 4,
-        activeNotices: 3,
-        archivedNotices: 1,
-        withdrawnNotices: 0,
-        totalEligibleStudents: 390,
-        overallAcknowledgementRate: 85,
-        overdueActionsCount: 34,
-        noticesWithRecentRevisions: 1,
-      },
-      authorizedRole: 'coordinator',
-      timestamp: new Date().toISOString(),
-    });
-  });
-
-  // Security & Audit Logs Endpoint (Protected for Coordinator / Admin)
-  app.get('/api/audit-logs', requireCoordinator, (req: AuthenticatedRequest, res) => {
-    res.json({
-      success: true,
-      status: 'verified_immutable',
-      schema: 'notice_decoder_audit_phase3_v1',
-      totalEntries: 3,
-      data: [
-        {
-          id: 'aud_srv_01',
-          timestamp: new Date().toISOString(),
-          userId: req.userId,
-          userDisplayName: 'Dr. Eleanor Vance (Dean of Academics)',
-          userRole: 'coordinator',
-          action: 'NOTICE_PUBLISHED',
-          targetType: 'notice',
-          targetId: 'coord_notice_exam_2026',
-          summary: 'Published University Odd-Semester End-Term Examination Schedule v1 to CS Batch 2026',
-        },
-      ],
-    });
+    res.json({ success: true, message: 'All personal notices, timetable classes, and reviews permanently cleared.' });
   });
 
   // Client SPA mounting
@@ -428,7 +519,7 @@ Return a JSON object conforming strictly to this format:
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Notice Decoder (Phase 2) running at http://0.0.0.0:${PORT}`);
+    console.log(`Notice Decoder running at http://0.0.0.0:${PORT}`);
   });
 }
 

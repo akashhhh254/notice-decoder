@@ -17,12 +17,13 @@ import {
   ShieldAlert,
   ShieldCheck,
   Building2,
-  ArrowRightLeft,
+  Lock,
 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
   const { navigate } = useRouter();
-  const { user, signOut, isSupabase, isCoordinator, switchPersona } = useAuth();
+  const { user, signOut } = useAuth();
+  const isCoordinator = user?.role === 'coordinator' || user?.role === 'admin';
 
   const [timezone, setTimezone] = useState(user?.timezone || 'UTC');
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
@@ -36,26 +37,30 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleSyncNotices = async () => {
+    if (!user) return;
     setIsSyncing(true);
-    setSyncStatus('Checking local notice records...');
+    setSyncStatus('Checking personal notice records...');
 
     try {
-      const localNotices = await noticeRepository.getAll();
+      const localNotices = await noticeRepository.getAll(user.id);
       if (localNotices.length === 0) {
-        setSyncStatus('No unassigned notices found to sync.');
+        setSyncStatus('No saved notices found in current account.');
         return;
       }
 
-      setSyncStatus(`Found ${localNotices.length} notices. Verifying ownership with account ${user?.email || 'authenticated'}...`);
+      setSyncStatus(`Syncing ${localNotices.length} notices for ${user.email}...`);
 
       for (const notice of localNotices) {
-        await noticeRepository.save({
-          ...notice,
-          updatedAt: new Date().toISOString(),
-        });
+        await noticeRepository.save(
+          {
+            ...notice,
+            updatedAt: new Date().toISOString(),
+          },
+          user.id
+        );
       }
 
-      setSyncStatus(`Successfully synced and updated ${localNotices.length} notices in your account.`);
+      setSyncStatus(`Successfully verified and synced ${localNotices.length} notices.`);
       setSuccessToast('Sync completed.');
       setTimeout(() => setSuccessToast(null), 4000);
     } catch (err: any) {
@@ -63,17 +68,6 @@ export const SettingsPage: React.FC = () => {
     } finally {
       setIsSyncing(false);
     }
-  };
-
-  const handleToggleRole = async () => {
-    if (isCoordinator) {
-      await switchPersona('student');
-      setSuccessToast('Switched to Student role.');
-    } else {
-      await switchPersona('coordinator');
-      setSuccessToast('Switched to Coordinator role.');
-    }
-    setTimeout(() => setSuccessToast(null), 3000);
   };
 
   const handleExportUserData = async () => {
@@ -102,8 +96,8 @@ export const SettingsPage: React.FC = () => {
 
     if (confirmation === 'DELETE') {
       await privacyService.purgeAccountData(user.id, user.displayName);
-      await noticeRepository.clearAll();
-      await timetableRepository.resetToDefaults(user?.id || 'demo');
+      await noticeRepository.clearAll(user.id);
+      await timetableRepository.resetToDefaults(user.id);
       await signOut();
       navigate('/');
     }
@@ -130,7 +124,7 @@ export const SettingsPage: React.FC = () => {
           Settings & Account Management
         </h1>
         <p className="text-xs sm:text-sm text-slate-600 mt-1">
-          Manage your academic profile, calendar timezone, data backup, and privacy preferences.
+          Manage your verified academic profile, calendar timezone, data backup, and privacy preferences.
         </p>
       </div>
 
@@ -139,7 +133,7 @@ export const SettingsPage: React.FC = () => {
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <User className="w-4 h-4 text-sky-700" />
-            <span>Student Profile & Regional Settings</span>
+            <span>Authenticated Profile & Regional Settings</span>
           </h2>
           <span
             className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
@@ -165,7 +159,7 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="font-semibold text-slate-700">Academic Email</label>
+              <label className="font-semibold text-slate-700">Google Account Email</label>
               <input
                 type="text"
                 disabled
@@ -203,14 +197,6 @@ export const SettingsPage: React.FC = () => {
             >
               Save Preferences
             </button>
-            <button
-              type="button"
-              onClick={handleToggleRole}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <ArrowRightLeft className="w-3.5 h-3.5 text-slate-500" />
-              <span>Switch to {isCoordinator ? 'Student' : 'Coordinator'} Role</span>
-            </button>
           </div>
         </form>
       </div>
@@ -220,10 +206,10 @@ export const SettingsPage: React.FC = () => {
         <div className="space-y-1">
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Upload className="w-4 h-4 text-sky-700" />
-            <span>Sync Notice Records</span>
+            <span>Sync Personal Notices</span>
           </h2>
           <p className="text-xs text-slate-600">
-            Verify and associate your saved notice records with your active session.
+            Verify and synchronize your personal saved notice records with your account on the server.
           </p>
         </div>
 
@@ -251,16 +237,16 @@ export const SettingsPage: React.FC = () => {
             <span>Privacy & Data Portability</span>
           </h2>
           <p className="text-xs text-slate-600 leading-relaxed">
-            Notice Decoder operates under strict data minimization. Your personal schedule entries, uploaded circulars, and verified task completions belong exclusively to you.
+            Notice Decoder operates under strict data minimization. Your personal schedule entries, uploaded circulars, and verified task completions belong exclusively to your account.
           </p>
         </div>
 
         <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1.5">
           <span className="font-semibold text-slate-800 block">Data Handling Safeguards:</span>
           <ul className="list-disc list-inside space-y-0.5 text-slate-600 text-[11px]">
-            <li>Personal notices & weekly timetables: Maintained for your active semester schedule.</li>
+            <li>Personal notices & weekly timetables: Scoped strictly to your authenticated Google account.</li>
             <li>Source quotations: Verbatim extracts preserved alongside structured entries for verification.</li>
-            <li>No tracking or external analytics cookies: Kept private to your academic session.</li>
+            <li>Strict Authentication: Authenticated via Google Identity Services & Firebase Authentication.</li>
           </ul>
         </div>
 
@@ -291,7 +277,7 @@ export const SettingsPage: React.FC = () => {
           onClick={handleDeleteAllUserData}
           className="px-4 py-2 text-xs font-semibold text-white bg-rose-700 hover:bg-rose-800 rounded-lg transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          <Trash2 className="w-4 h-4" />
           <span>Permanently Delete All Account Data</span>
         </button>
       </div>

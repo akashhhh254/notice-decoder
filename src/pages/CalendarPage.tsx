@@ -51,7 +51,7 @@ export const CalendarPage: React.FC = () => {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const nList = await noticeRepository.getAll();
+      const nList = await noticeRepository.getAll(user?.id);
       const ttList = await timetableRepository.getEntries(user?.id);
       const rList = await timetableRepository.getConflictReviews(user?.id);
 

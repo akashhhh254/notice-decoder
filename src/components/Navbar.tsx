@@ -1,56 +1,39 @@
 import React, { useState } from 'react';
 import { useRouter } from '../context/RouterContext';
 import { useAuth } from '../context/AuthContext';
-import { NotificationCenter } from './NotificationCenter';
 import {
   PlusCircle,
   Menu,
   X,
   Calendar,
-  FileText,
+  BookOpen,
   User,
   LogOut,
   Settings,
   LogIn,
-  Building2,
-  ArrowRightLeft,
-  GraduationCap,
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const { path, navigate } = useRouter();
-  const { user, signOut, isCoordinator, switchPersona } = useAuth();
+  const { user, signOut } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
   const navLinks = user
     ? [
         { label: 'Dashboard', href: '/dashboard' },
+        { label: 'Upload Notice', href: '/notices/new' },
         { label: 'Timetable', href: '/timetable' },
         { label: 'Calendar', href: '/calendar' },
-        ...(isCoordinator ? [{ label: 'Coordinator Portal', href: '/coordinator' }] : []),
-        { label: 'Upload Notice', href: '/notices/new' },
       ]
     : [
         { label: 'Overview', href: '/' },
-        { label: 'Upload Notice', href: '/notices/new' },
       ];
 
   const handleNav = (href: string) => {
     setMobileMenuOpen(false);
     setUserDropdownOpen(false);
     navigate(href);
-  };
-
-  const handleToggleRole = async () => {
-    setUserDropdownOpen(false);
-    if (isCoordinator) {
-      await switchPersona('student');
-      navigate('/dashboard');
-    } else {
-      await switchPersona('coordinator');
-      navigate('/coordinator');
-    }
   };
 
   return (
@@ -72,7 +55,6 @@ export const Navbar: React.FC = () => {
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
             {navLinks.map((link) => {
               const isActive = path === link.href || (link.href !== '/' && path.startsWith(link.href));
-              const isCoord = link.href === '/coordinator';
 
               return (
                 <button
@@ -81,12 +63,9 @@ export const Navbar: React.FC = () => {
                   className={`whitespace-nowrap shrink-0 transition-colors py-1 relative flex items-center gap-1.5 cursor-pointer ${
                     isActive
                       ? 'text-sky-800 font-semibold'
-                      : isCoord
-                      ? 'text-amber-800 hover:text-amber-900 font-medium'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  {isCoord && <Building2 className="w-3.5 h-3.5 text-amber-600" />}
                   <span>{link.label}</span>
                   {isActive && (
                     <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-sky-700 rounded-full" />
@@ -96,67 +75,40 @@ export const Navbar: React.FC = () => {
             })}
           </nav>
 
-          {/* Right Section: Notifications, Actions & Auth Profile */}
+          {/* Right Section: Auth Profile & Action */}
           <div className="hidden md:flex items-center gap-3 shrink-0">
-            {user && <NotificationCenter />}
-
             {user ? (
               <div className="relative">
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
                   className="flex items-center gap-2 p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-xs font-semibold text-slate-800 cursor-pointer shadow-2xs"
                 >
-                  <div
-                    className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-[11px] ${
-                      isCoordinator ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'
-                    }`}
-                  >
-                    {user.displayName.charAt(0).toUpperCase()}
-                  </div>
-                  <span className="max-w-[120px] truncate">{user.displayName.split(' ')[0]}</span>
-                  <span
-                    className={`px-1 py-0.2 rounded-xs text-[9px] font-bold ${
-                      isCoordinator ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'
-                    }`}
-                  >
-                    {isCoordinator ? 'COORD' : 'STUDENT'}
-                  </span>
+                  {user.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt={user.displayName}
+                      className="w-6 h-6 rounded-md object-cover"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-md bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-[11px]">
+                      {user.displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="max-w-[130px] truncate">{user.displayName}</span>
                 </button>
 
                 {userDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-60 bg-white rounded-xl border border-slate-200 shadow-lg py-1 z-50 text-xs">
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-slate-200 shadow-lg py-1 z-50 text-xs">
                     <div className="px-3 py-2 border-b border-slate-100">
-                      <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <p className="font-semibold text-slate-900 truncate">{user.displayName}</p>
-                        <span
-                          className={`px-1.5 py-0.2 text-[9px] font-bold rounded-xs ${
-                            isCoordinator
-                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                              : 'bg-sky-100 text-sky-800 border border-sky-200'
-                          }`}
-                        >
-                          {isCoordinator ? 'COORDINATOR' : 'STUDENT'}
-                        </span>
-                      </div>
+                      <p className="font-semibold text-slate-900 truncate">{user.displayName}</p>
                       <p className="text-slate-500 text-[11px] truncate">{user.email}</p>
                     </div>
 
-                    {isCoordinator && (
-                      <button
-                        onClick={() => handleNav('/coordinator')}
-                        className="w-full text-left px-3 py-2 text-amber-800 hover:bg-amber-50 flex items-center gap-2 font-medium cursor-pointer"
-                      >
-                        <Building2 className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Coordinator Portal</span>
-                      </button>
-                    )}
-
                     <button
-                      onClick={handleToggleRole}
+                      onClick={() => handleNav('/dashboard')}
                       className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
                     >
-                      <ArrowRightLeft className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Switch to {isCoordinator ? 'Student' : 'Coordinator'} Role</span>
+                      <span>Student Dashboard</span>
                     </button>
 
                     <button
@@ -164,7 +116,7 @@ export const Navbar: React.FC = () => {
                       className="w-full text-left px-3 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
                     >
                       <Settings className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Settings & Account</span>
+                      <span>Account Settings</span>
                     </button>
 
                     <button
@@ -185,32 +137,33 @@ export const Navbar: React.FC = () => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleNav('/auth/login')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-300 rounded-lg shadow-2xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-300 rounded-lg shadow-2xs cursor-pointer"
                 >
                   <LogIn className="w-3.5 h-3.5 text-slate-500" />
                   <span>Sign In</span>
                 </button>
                 <button
-                  onClick={() => handleNav('/auth/signup')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-sky-800 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 transition-colors cursor-pointer"
+                  onClick={() => handleNav('/auth/login')}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-xs cursor-pointer transition-colors"
                 >
-                  <span>Sign Up</span>
+                  <span>Continue with Google</span>
                 </button>
               </div>
             )}
 
-            <button
-              onClick={() => handleNav('/notices/new')}
-              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <PlusCircle className="w-4 h-4 text-sky-300" />
-              <span>Decode Notice</span>
-            </button>
+            {user && (
+              <button
+                onClick={() => handleNav('/notices/new')}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <PlusCircle className="w-4 h-4 text-sky-300" />
+                <span>Decode Notice</span>
+              </button>
+            )}
           </div>
 
-          {/* Mobile hamburger menu */}
+          {/* Mobile menu trigger */}
           <div className="flex md:hidden items-center gap-2">
-            {user && <NotificationCenter />}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 text-slate-600 hover:text-slate-900 focus:outline-hidden cursor-pointer"
@@ -244,18 +197,26 @@ export const Navbar: React.FC = () => {
             {user ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-3 py-2 bg-white rounded-lg border border-slate-200 text-xs">
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-slate-900 block">{user.displayName}</span>
-                      <span
-                        className={`px-1 py-0.2 rounded-xs text-[9px] font-bold ${
-                          isCoordinator ? 'bg-amber-100 text-amber-800' : 'bg-sky-100 text-sky-800'
-                        }`}
-                      >
-                        {isCoordinator ? 'COORD' : 'STUDENT'}
+                  <div className="flex items-center gap-2">
+                    {user.photoURL ? (
+                      <img
+                        src={user.photoURL}
+                        alt={user.displayName}
+                        className="w-7 h-7 rounded-md object-cover"
+                      />
+                    ) : (
+                      <div className="w-7 h-7 rounded-md bg-sky-100 text-sky-800 flex items-center justify-center font-bold text-xs">
+                        {user.displayName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <span className="font-bold text-slate-900 block truncate max-w-[180px]">
+                        {user.displayName}
+                      </span>
+                      <span className="text-slate-500 text-[11px] truncate block max-w-[180px]">
+                        {user.email}
                       </span>
                     </div>
-                    <span className="text-slate-500 text-[11px]">{user.email}</span>
                   </div>
                   <button
                     onClick={async () => {
@@ -263,7 +224,7 @@ export const Navbar: React.FC = () => {
                       await signOut();
                       navigate('/');
                     }}
-                    className="p-1 text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                    className="p-1.5 text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
                     title="Sign Out"
                   >
                     <LogOut className="w-4 h-4" />
@@ -271,37 +232,22 @@ export const Navbar: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={handleToggleRole}
-                  className="w-full text-center px-3 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg cursor-pointer"
+                  onClick={() => handleNav('/notices/new')}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 shadow-xs cursor-pointer"
                 >
-                  Switch to {isCoordinator ? 'Student' : 'Coordinator'} Role
+                  <PlusCircle className="w-4 h-4 text-sky-300" />
+                  <span>Decode Notice</span>
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleNav('/auth/login')}
-                  className="w-1/2 flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg cursor-pointer"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>Sign In</span>
-                </button>
-                <button
-                  onClick={() => handleNav('/auth/signup')}
-                  className="w-1/2 flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-sky-800 bg-sky-50 border border-sky-200 rounded-lg cursor-pointer"
-                >
-                  <span>Sign Up</span>
-                </button>
-              </div>
+              <button
+                onClick={() => handleNav('/auth/login')}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg shadow-2xs cursor-pointer"
+              >
+                <LogIn className="w-3.5 h-3.5 text-slate-600" />
+                <span>Continue with Google</span>
+              </button>
             )}
-
-            <button
-              onClick={() => handleNav('/notices/new')}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 shadow-xs cursor-pointer"
-            >
-              <PlusCircle className="w-4 h-4 text-sky-300" />
-              <span>Decode Notice</span>
-            </button>
           </div>
         </div>
       )}

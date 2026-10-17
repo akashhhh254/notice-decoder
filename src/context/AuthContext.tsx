@@ -1,29 +1,27 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, AuthSession } from '../types/phase2';
-import { authService, isSupabaseConfigured } from '../services/authService';
+import { authService } from '../services/authService';
 
 interface AuthContextType {
   user: UserProfile | null;
   session: AuthSession | null;
   loading: boolean;
-  isSupabase: boolean;
-  isCoordinator: boolean;
-  signIn: (email: string, pass: string) => Promise<UserProfile>;
-  signUp: (email: string, pass: string, name: string) => Promise<UserProfile>;
+  isConfigured: boolean;
+  signInWithGoogle: () => Promise<UserProfile>;
   signOut: () => Promise<void>;
-  switchPersona: (role: 'student' | 'coordinator') => Promise<UserProfile>;
+  getIdToken: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
   loading: true,
-  isSupabase: false,
-  isCoordinator: false,
-  signIn: async () => { throw new Error('Not initialized'); },
-  signUp: async () => { throw new Error('Not initialized'); },
+  isConfigured: false,
+  signInWithGoogle: async () => {
+    throw new Error('Auth not initialized');
+  },
   signOut: async () => {},
-  switchPersona: async () => { throw new Error('Not initialized'); },
+  getIdToken: async () => null,
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -33,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Initial fetch
+    // Initial fetch from Firebase
     authService.getSession().then((s) => {
       setSession(s);
       setLoading(false);
@@ -47,15 +45,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const signIn = async (email: string, pass: string) => {
-    const profile = await authService.signIn(email, pass);
-    const curr = await authService.getSession();
-    setSession(curr);
-    return profile;
-  };
-
-  const signUp = async (email: string, pass: string, name: string) => {
-    const profile = await authService.signUp(email, pass, name);
+  const signInWithGoogle = async () => {
+    const profile = await authService.signInWithGoogle();
     const curr = await authService.getSession();
     setSession(curr);
     return profile;
@@ -66,14 +57,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession({ user: null, token: null, expiresAt: null });
   };
 
-  const switchPersona = async (role: 'student' | 'coordinator') => {
-    const profile = await authService.switchPersona(role);
-    const curr = await authService.getSession();
-    setSession(curr);
-    return profile;
+  const getIdToken = async () => {
+    return authService.getIdToken();
   };
-
-  const isCoordinator = Boolean(session?.user?.role === 'coordinator' || session?.user?.role === 'admin');
 
   return (
     <AuthContext.Provider
@@ -81,12 +67,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user: session?.user || null,
         session,
         loading,
-        isSupabase: isSupabaseConfigured(),
-        isCoordinator,
-        signIn,
-        signUp,
+        isConfigured: authService.isConfigured(),
+        signInWithGoogle,
         signOut,
-        switchPersona,
+        getIdToken,
       }}
     >
       {children}

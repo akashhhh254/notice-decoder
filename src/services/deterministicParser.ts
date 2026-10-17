@@ -172,9 +172,9 @@ export function parseNoticeDeterministically(
       if (!normTime.startTime) {
         uncertainties.push({
           id: `unc_time_${eventCounter}`,
-          field: `Event "${eventTitle.substring(0, 30)}" Time`,
+          field: `${eventTitle.substring(0, 30)} (Time)`,
           issueType: 'missing_time',
-          explanation: 'Event date was detected but no specific start/end time was found in the text.',
+          explanation: 'The notice specifies an event date but does not state a start or end time.',
           resolved: false,
         });
       }
@@ -182,9 +182,9 @@ export function parseNoticeDeterministically(
       if (normDate.isAmbiguous && normDate.raw) {
         uncertainties.push({
           id: `unc_date_${eventCounter}`,
-          field: `Event "${eventTitle.substring(0, 30)}" Date`,
+          field: `${eventTitle.substring(0, 30)} (Date)`,
           issueType: 'ambiguous_date',
-          explanation: `Date format "${normDate.raw}" has ambiguous day/month or inferred year.`,
+          explanation: `The date "${normDate.raw}" is ambiguous. Please check the original notice to confirm.`,
           resolved: false,
         });
       }
@@ -328,36 +328,28 @@ export function parseNoticeDeterministically(
   const plainLanguageSummary = `This notice announces "${noticeTitle}" issued by ${institution || department || 'the College Administration'}. Key dates and requirements have been identified for ${eligibility.eligibleBatches.join(', ')}. Students must complete ${checklist.length} required action${checklist.length > 1 ? 's' : ''} including "${checklist[0]?.task.substring(0, 60)}".`;
 
   // 8. General Ambiguity Checks
-  if (!referenceNumber) {
-    uncertainties.push({
-      id: `unc_ref`,
-      field: 'Official Reference Number',
-      issueType: 'low_confidence',
-      explanation: 'No official university dispatch or circular reference number was detected in the document header.',
-      resolved: false,
-    });
-  }
+  // Note: Missing optional official reference numbers or dispatch IDs are normal and must not trigger warnings
 
   const result: NoticeDecoded = {
     id: `notice_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     noticeTitle,
     noticeType,
     urgency,
-    institution: institution || 'State Technical University & Affiliated Colleges',
-    department: department || 'Office of Academic Affairs & Examinations',
-    referenceNumber: referenceNumber || 'CIRCULAR-PENDING-REF',
+    institution: institution || 'Not specified in notice',
+    department: department || 'Not specified in notice',
+    referenceNumber: referenceNumber || '',
     publicationDate: publicationDate || new Date().toISOString().split('T')[0],
     plainLanguageSummary,
     events,
     checklist,
     eligibility,
     organizer: {
-      name: organizerName,
-      designation: organizerRole,
-      department: department || 'Department Office',
-      email: email || 'academics@college.edu',
+      name: organizerName || '',
+      designation: organizerRole || '',
+      department: department || '',
+      email: email || '',
       phone: phone || '',
-      office: 'Room 101, Main Administrative Building',
+      office: '',
     },
     uncertainties,
     rawText,

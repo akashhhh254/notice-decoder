@@ -6,6 +6,7 @@ export interface UserProfile {
   id: string;
   email: string;
   displayName: string;
+  photoURL?: string;
   timezone: string;
   role?: UserRole;
   department?: string;

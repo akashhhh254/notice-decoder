@@ -111,9 +111,8 @@ class TimetableRepository {
   async getEntries(userId?: string): Promise<TimetableEntry[]> {
     if (!this.cache) this.init();
     const list = this.cache || [];
-    if (!userId) return [...list];
-    // Return entries owned by user, or demo entries if demo user
-    return list.filter((e) => e.userId === userId || (!e.userId && userId === 'user_demo_student_01'));
+    if (!userId) return [];
+    return list.filter((e) => e.userId === userId);
   }
 
   async saveEntry(entry: TimetableEntry): Promise<TimetableEntry> {

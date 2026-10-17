@@ -44,7 +44,7 @@ export const DashboardPage: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const data = await noticeRepository.getAll();
+      const data = await noticeRepository.getAll(user?.id);
       const tt = await timetableRepository.getEntries(user?.id);
       setNotices(data);
       setTimetable(tt);
@@ -80,10 +80,10 @@ export const DashboardPage: React.FC = () => {
   }, [user]);
 
   const handleResetToSamples = async () => {
-    if (window.confirm('Reset notices to standard realistic college notice samples? Any custom edits will be restored to defaults.')) {
+    if (window.confirm('Load standard realistic college notice samples into your account? Any custom edits will be preserved.')) {
       setResetting(true);
       try {
-        const restored = await noticeRepository.resetToSamples();
+        const restored = await noticeRepository.resetToSamples(user?.id);
         setNotices(restored);
       } finally {
         setResetting(false);
@@ -94,7 +94,7 @@ export const DashboardPage: React.FC = () => {
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this notice record?')) {
-      await noticeRepository.delete(id);
+      await noticeRepository.delete(id, user?.id);
       loadData();
     }
   };
@@ -189,9 +189,13 @@ export const DashboardPage: React.FC = () => {
           <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
             <span>Student Dashboard</span>
             <span aria-hidden="true">·</span>
-            <span>{user ? user.displayName : 'Alex Rivera'}</span>
-            <span aria-hidden="true">·</span>
-            <span className="text-slate-600 font-medium">CS Batch 2026</span>
+            <span className="font-medium text-slate-700">{user?.displayName || 'Student'}</span>
+            {user?.email && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="text-slate-500 truncate max-w-[200px]">{user.email}</span>
+              </>
+            )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
             Academic Schedule & Notices
@@ -204,7 +208,7 @@ export const DashboardPage: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <button
             onClick={() => navigate('/timetable')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
           >
             <BookOpen className="w-3.5 h-3.5 text-sky-700" />
             <span>My Timetable</span>
@@ -212,20 +216,10 @@ export const DashboardPage: React.FC = () => {
 
           <button
             onClick={() => navigate('/calendar')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
           >
             <Calendar className="w-3.5 h-3.5 text-sky-700" />
             <span>Calendar</span>
-          </button>
-
-          <button
-            onClick={handleResetToSamples}
-            disabled={resetting}
-            title="Reset repository to realistic college notice samples"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-          >
-            <RotateCcw className={`w-3.5 h-3.5 text-slate-500 ${resetting ? 'animate-spin' : ''}`} />
-            <span>Reset Demo</span>
           </button>
 
           <button

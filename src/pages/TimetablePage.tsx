@@ -63,7 +63,7 @@ export const TimetablePage: React.FC = () => {
     setLoading(true);
     try {
       const ttList = await timetableRepository.getEntries(user?.id);
-      const notices = await noticeRepository.getAll();
+      const notices = await noticeRepository.getAll(user?.id);
       const reviews = await timetableRepository.getConflictReviews(user?.id);
 
       setEntries(ttList);

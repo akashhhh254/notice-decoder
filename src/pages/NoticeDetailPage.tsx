@@ -69,7 +69,7 @@ export const NoticeDetailPage: React.FC = () => {
     setLoading(true);
     try {
       if (noticeId) {
-        let data: NoticeDecoded | null = await noticeRepository.getById(noticeId);
+        let data: NoticeDecoded | null = await noticeRepository.getById(noticeId, user?.id);
         let coordData: CoordinatorNotice | null = null;
 
         if (!data) {
@@ -195,7 +195,7 @@ export const NoticeDetailPage: React.FC = () => {
     };
     setNotice(updated);
     setEditForm(updated);
-    await noticeRepository.save(updated);
+    await noticeRepository.save(updated, user?.id);
     triggerSuccess();
   };
 
@@ -203,7 +203,7 @@ export const NoticeDetailPage: React.FC = () => {
   const handleSaveEdits = async () => {
     if (!editForm) return;
     setNotice(editForm);
-    await noticeRepository.save(editForm);
+    await noticeRepository.save(editForm, user?.id);
     setIsEditing(false);
     triggerSuccess();
   };
@@ -229,15 +229,15 @@ export const NoticeDetailPage: React.FC = () => {
     const updated = { ...notice, uncertainties: updatedUncertainties };
     setNotice(updated);
     setEditForm(updated);
-    await noticeRepository.save(updated);
+    await noticeRepository.save(updated, user?.id);
     setResolvingId(null);
     setResolutionText('');
     triggerSuccess();
   };
 
   const handleDeleteNotice = async () => {
-    if (window.confirm('Delete this decoded notice from local storage?')) {
-      await noticeRepository.delete(notice.id);
+    if (window.confirm('Delete this decoded notice from your account?')) {
+      await noticeRepository.delete(notice.id, user?.id);
       navigate('/dashboard');
     }
   };

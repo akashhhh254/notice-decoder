@@ -105,6 +105,7 @@ export const NoticeDecodedSchema = z.object({
     'official_circular',
   ]).default('sample_fixture'),
   status: z.enum(['draft', 'reviewed', 'confirmed', 'archived']).default('reviewed'),
+  userId: z.string().nullable().optional(),
   fileName: z.string().nullable().optional(),
   fileType: z.string().nullable().optional(),
   fileSize: z.number().nullable().optional(),
